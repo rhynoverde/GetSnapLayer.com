@@ -42,6 +42,11 @@ function updatePricing() {
     discountLabel.textContent = `Today’s Discount: ${discount}% Off`;
   }
 
+  const headerDiscountText = document.getElementById('header-discount-text');
+  if (headerDiscountText) {
+    headerDiscountText.textContent = `${discount}% discount expires in`;
+  }
+
   const tomorrowLine = document.getElementById('tomorrow-line');
   if (tomorrowLine) {
     const tomorrowDiscount = Math.max(0, discount - 1);
@@ -69,17 +74,26 @@ function formatHHMMSS(ms) {
 function applyTimerEffects(remainingMs) {
   const main = document.getElementById('timer');
   const mini = document.getElementById('mini-timer-display');
+  const head = document.getElementById('header-timer');
+  const headMobile = document.getElementById('header-timer-mobile');
+
   const inLastHour = remainingMs <= 3600000 && remainingMs > 0;
-  const inLastTen = remainingMs <= 600000 && remainingMs > 0;
+  const inLastTenMin = remainingMs <= 600000 && remainingMs > 0;
+  const inLastTenSec = remainingMs <= 10000 && remainingMs > 0;
 
   const apply = (el) => {
     if (!el) return;
-    el.classList.toggle('pulse-hour', inLastHour);
-    el.classList.toggle('shake-ten', inLastTen);
+    el.classList.toggle('pulse-hour', inLastHour && !inLastTenMin && !inLastTenSec);
+    el.classList.toggle('shake-ten', inLastTenMin && !inLastTenSec);
+    el.classList.toggle('shake-final', inLastTenSec);
   };
+
   apply(main);
   apply(mini);
+  apply(head);
+  apply(headMobile);
 }
+
 
 function explodeAndReset() {
   if (explodedToday) return;
@@ -114,12 +128,23 @@ function updateTimer() {
   const miniEl = document.getElementById('mini-timer-display');
   if (miniEl) miniEl.textContent = text;
 
+  const headEl = document.getElementById('header-timer');
+  if (headEl) headEl.textContent = text;
+
+  const headMobileEl = document.getElementById('header-timer-mobile');
+  if (headMobileEl) headMobileEl.textContent = text;
+
   applyTimerEffects(remaining);
 
   if (remaining <= 0) {
     explodeAndReset();
   }
+
+  if (dev.forceRemainingSec != null && dev.forceRemainingSec > 0) {
+    dev.forceRemainingSec -= 1;
+  }
 }
+
 
 function showMiniTimerIfNeeded() {
   const mini = document.getElementById('mini-timer');
@@ -139,22 +164,31 @@ document.addEventListener('DOMContentLoaded', () => {
   updateTimer();
   setInterval(updateTimer, 1000);
 
-  // Logo shrink on scroll
+  // Logo shrink on scroll + show mini timer
   const logo = document.getElementById('snaplayer-logo');
-  if (logo) {
-    const onScroll = () => {
+  const onScroll = () => {
+    if (logo) {
       if (window.scrollY > 20) {
         logo.classList.add('logo-small');
       } else {
         logo.classList.remove('logo-small');
       }
-      showMiniTimerIfNeeded();
-    };
-    window.addEventListener('scroll', onScroll);
-    onScroll();
+    }
+    showMiniTimerIfNeeded();
+  };
+  window.addEventListener('scroll', onScroll);
+  onScroll();
+
+  // Mobile hamburger
+  const menuToggle = document.getElementById('menu-toggle');
+  const mobileNav = document.getElementById('mobile-nav');
+  if (menuToggle && mobileNav) {
+    menuToggle.addEventListener('click', () => {
+      mobileNav.classList.toggle('hidden');
+    });
   }
 
-  // Dev panel buttons
+  // Dev panel buttons (simulate last hour / last 10 min / last 10 sec / explode / reset)
   const btnHour = document.getElementById('dev-hour');
   const btnTen = document.getElementById('dev-ten');
   const btnTenSec = document.getElementById('dev-tensec');

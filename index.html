@@ -45,9 +45,17 @@
       font-size: 1.15rem;
     }
   
+    /* Header center line + timers */
+    .header-timer {
+      font-family: "Courier New", monospace;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+      color: #f87171;
+    }
+  
     /* Logo states */
     #snaplayer-logo.logo-large {
-      height: 200px; /* ~3–5× bigger look */
+      height: 240px;
       border-radius: 0.85rem;
       box-shadow: 0 20px 44px rgba(0,0,0,0.35);
       transition: height 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease, border-radius 0.25s ease;
@@ -61,20 +69,49 @@
     }
   
     /* Timer effects */
-    @keyframes pulseHour {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.06); }
-    }
-    .pulse-hour { animation: pulseHour 1.2s infinite; }
+@keyframes pulseHour {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+.pulse-hour { animation: pulseHour 1.2s infinite; }
+
+@keyframes shakeTen {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+.shake-ten { animation: shakeTen 0.5s infinite; }
+
+@keyframes shakeFinal {
+  0%,100% { transform: translateX(0) rotate(0deg); }
+  10% { transform: translateX(-4px) rotate(-1deg); }
+  20% { transform: translateX(4px) rotate(1deg); }
+  30% { transform: translateX(-5px) rotate(-2deg); }
+  40% { transform: translateX(5px) rotate(2deg); }
+  50% { transform: translateX(-6px) rotate(-2deg); }
+  60% { transform: translateX(6px) rotate(2deg); }
+  70% { transform: translateX(-7px) rotate(3deg); }
+  80% { transform: translateX(7px) rotate(-3deg); }
+  90% { transform: translateX(-8px) rotate(3deg); }
+}
+.shake-final { animation: shakeFinal 0.45s infinite; }
+
   
-    @keyframes shakeTen {
-      0%,100% { transform: translateX(0); }
-      20% { transform: translateX(-2px); }
-      40% { transform: translateX(2px); }
-      60% { transform: translateX(-2px); }
-      80% { transform: translateX(2px); }
+    @keyframes shakeFinal {
+      0%,100% { transform: translateX(0) rotate(0deg); }
+      10% { transform: translateX(-4px) rotate(-1deg); }
+      20% { transform: translateX(4px) rotate(1deg); }
+      30% { transform: translateX(-5px) rotate(-2deg); }
+      40% { transform: translateX(5px) rotate(2deg); }
+      50% { transform: translateX(-6px) rotate(-2deg); }
+      60% { transform: translateX(6px) rotate(2deg); }
+      70% { transform: translateX(-7px) rotate(-3deg); }
+      80% { transform: translateX(7px) rotate(3deg); }
+      90% { transform: translateX(-8px) rotate(-3deg); }
     }
-    .shake-ten { animation: shakeTen 0.5s infinite; }
+    .shake-final { animation: shakeFinal 0.45s infinite; }
   
     /* Explosion overlay */
     #explosion-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 60; }
@@ -88,17 +125,27 @@
       50% { opacity: 0.6; }
       100% { opacity: 0; }
     }
-  </style>
+  </style>  
   
 </head>
 <body class="bg-blue-950 text-white font-sans">
   <!-- Navigation & Logo -->
-  <header class="bg-blue-950 border-b border-blue-800 fixed top-0 left-0 right-0 z-50">
-    <div class="container mx-auto flex justify-between items-center py-4 px-4">
+  <header class="bg-blue-950 border-b border-blue-800 sticky top-0 z-50">
+    <div class="container mx-auto flex items-center py-4 px-4">
       <div class="flex items-center space-x-2">
         <img src="images/SnapLayer-Logo-whiteBlue.png" alt="SnapLayer logo" id="snaplayer-logo" class="logo-large">
         <span class="font-bold text-xl">SnapLayer</span>
       </div>
+  
+      <div class="flex-1 hidden md:flex justify-center">
+        <div class="text-sm md:text-base flex items-center gap-2">
+          <span id="header-discount-text" class="whitespace-nowrap"></span>
+          <span id="header-timer" class="header-timer"></span>
+        </div>
+      </div>
+  
+      <button id="menu-toggle" class="md:hidden ml-auto p-2 border border-blue-700 rounded">☰</button>
+  
       <nav class="hidden md:flex space-x-6 text-sm">
         <a href="index.html" class="hover:text-pink-400">Home</a>
         <a href="gallery.html" class="hover:text-pink-400">Gallery</a>
@@ -108,7 +155,25 @@
         <a href="faq.html" class="hover:text-pink-400">FAQ</a>
       </nav>
     </div>
+  
+    <div class="md:hidden px-4 pb-2">
+      <div class="flex justify-center">
+        <span id="header-timer-mobile" class="header-timer"></span>
+      </div>
+    </div>
+  
+    <div id="mobile-nav" class="md:hidden hidden border-t border-blue-800 px-4 pb-3">
+      <div class="flex flex-col space-y-2 pt-2">
+        <a href="index.html" class="hover:text-pink-400">Home</a>
+        <a href="gallery.html" class="hover:text-pink-400">Gallery</a>
+        <a href="usecases.html" class="hover:text-pink-400">Use Cases</a>
+        <a href="roadmap.html" class="hover:text-pink-400">Roadmap</a>
+        <a href="referral.html" class="hover:text-pink-400">Referral</a>
+        <a href="faq.html" class="hover:text-pink-400">FAQ</a>
+      </div>
+    </div>
   </header>
+  
 
   <!-- Hero Section -->
   <section id="hero" class="bg-blue-900 pt-36 pb-20 text-center px-4">
@@ -124,7 +189,7 @@
       <p id="tomorrow-line" class="tomorrow-line"></p>
     </div>
   
-    <a href="#plans" class="bg-pink-500 hover:bg-pink-600 text-white px-10 py-5 rounded-full text-2xl font-semibold transition-colors">Get Prelaunch Access</a>
+    <a href="#plans" class="bg-pink-500 hover:bg-pink-600 text-white px-10 py-5 rounded-full text-2xl font-semibold transition-colors">Get Prelaunch Discount and Extra Limits</a>
   </section>
   
 
@@ -136,7 +201,7 @@
         <!-- Replace this iframe src with your actual video URL -->
         <iframe class="w-full h-64 md:h-96 rounded-lg shadow-lg" src="https://www.youtube.com/embed/pdgUEnKbxhk" title="SnapLayer Preview" frameborder="0" allowfullscreen></iframe>
       </div>
-      <p class="text-center text-sm text-gray-300">Placeholder video – replace with your sizzle reel or demos.</p>
+ 
     </div>
   </section>
 
