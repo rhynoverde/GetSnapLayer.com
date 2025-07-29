@@ -5,13 +5,98 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SnapLayer – Prelaunch Access</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .discount-pill {
+      background-color: #5b21b6;
+      padding: 0.9rem 2rem;
+      border-radius: 9999px;
+      font-weight: 800;
+      font-size: 3rem;
+      line-height: 1;
+      display: inline-block;
+      color: #ffffff;
+      box-shadow: 0 10px 28px rgba(91, 33, 182, 0.45), 0 4px 10px rgba(0, 0, 0, 0.35);
+    }
+    .countdown-label {
+      font-style: italic;
+      color: #fca5a5;
+      letter-spacing: 0.04em;
+      font-size: 1.25rem;
+    }
+    .timer-box {
+      background: #0a0a0a;
+      border: 3px solid #ef4444;
+      border-radius: 0.9rem;
+      padding: 0.9rem 1.25rem;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.28), inset 0 0 14px rgba(239, 68, 68, 0.18);
+      display: inline-block;
+      min-width: 360px;
+    }
+    .timer-display {
+      font-family: "Courier New", monospace;
+      font-size: 2.6rem;
+      letter-spacing: 0.35em;
+      color: #ff2d2d;
+      text-shadow: 0 0 8px rgba(255, 45, 45, 0.9), 0 0 16px rgba(255, 45, 45, 0.55);
+      text-align: center;
+    }
+    .tomorrow-line {
+      color: #cbd5e1;
+      font-size: 1.15rem;
+    }
+  
+    /* Logo states */
+    #snaplayer-logo.logo-large {
+      height: 200px; /* ~3–5× bigger look */
+      border-radius: 0.85rem;
+      box-shadow: 0 20px 44px rgba(0,0,0,0.35);
+      transition: height 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease, border-radius 0.25s ease;
+      transform: translateY(12px);
+    }
+    #snaplayer-logo.logo-small {
+      height: 48px;
+      border-radius: 0.375rem;
+      box-shadow: none;
+      transform: translateY(0);
+    }
+  
+    /* Timer effects */
+    @keyframes pulseHour {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+    .pulse-hour { animation: pulseHour 1.2s infinite; }
+  
+    @keyframes shakeTen {
+      0%,100% { transform: translateX(0); }
+      20% { transform: translateX(-2px); }
+      40% { transform: translateX(2px); }
+      60% { transform: translateX(-2px); }
+      80% { transform: translateX(2px); }
+    }
+    .shake-ten { animation: shakeTen 0.5s infinite; }
+  
+    /* Explosion overlay */
+    #explosion-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 60; }
+    #explosion-overlay.explode {
+      animation: explodeFlash 1100ms ease-out forwards;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.95) 0%, rgba(255,0,0,0.35) 30%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0) 100%);
+    }
+    @keyframes explodeFlash {
+      0% { opacity: 0; }
+      10% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 0; }
+    }
+  </style>
+  
 </head>
 <body class="bg-blue-950 text-white font-sans">
   <!-- Navigation & Logo -->
-  <header class="bg-blue-950 border-b border-blue-800">
+  <header class="bg-blue-950 border-b border-blue-800 fixed top-0 left-0 right-0 z-50">
     <div class="container mx-auto flex justify-between items-center py-4 px-4">
       <div class="flex items-center space-x-2">
-        <img src="images/SnapLayer-Logo-whiteBlue.png" alt="SnapLayer logo" class="h-10">
+        <img src="images/SnapLayer-Logo-whiteBlue.png" alt="SnapLayer logo" id="snaplayer-logo" class="logo-large">
         <span class="font-bold text-xl">SnapLayer</span>
       </div>
       <nav class="hidden md:flex space-x-6 text-sm">
@@ -26,19 +111,22 @@
   </header>
 
   <!-- Hero Section -->
-  <section class="bg-blue-900 pt-16 pb-20 text-center px-4">
-    <h1 class="text-5xl font-extrabold mb-4">Unlock Your Creativity with SnapLayer</h1>
-    <p class="text-xl max-w-3xl mx-auto mb-6">Generate personalized images from dynamic templates, automate your content creation and supercharge your referrals.</p>
-    <div class="flex justify-center items-baseline space-x-4 mb-6">
-      <span class="text-5xl font-extrabold" id="price-solo"></span>
-      <span class="text-lg" id="discount-solo"></span>
+  <section id="hero" class="bg-blue-900 pt-36 pb-20 text-center px-4">
+    <h1 class="text-5xl font-extrabold mb-5">Unlock Your Creativity with SnapLayer</h1>
+    <p class="text-2xl max-w-3xl mx-auto mb-8">Generate personalized images from dynamic templates, automate your content creation and supercharge your referrals.</p>
+  
+    <div class="flex flex-col items-center space-y-4 mb-8">
+      <span id="todays-discount" class="discount-pill"></span>
+      <p class="countdown-label">Warning, this discount self destructs in:</p>
+      <div class="timer-box">
+        <div id="timer" class="timer-display"></div>
+      </div>
+      <p id="tomorrow-line" class="tomorrow-line"></p>
     </div>
-    <div class="mb-6">
-      <span id="timer" class="text-lg font-mono"></span>
-      <p class="text-sm italic mt-1">Today's discount ends in</p>
-    </div>
-    <a href="#plans" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full text-lg font-semibold transition-colors">Get Prelaunch Access</a>
+  
+    <a href="#plans" class="bg-pink-500 hover:bg-pink-600 text-white px-10 py-5 rounded-full text-2xl font-semibold transition-colors">Get Prelaunch Access</a>
   </section>
+  
 
   <!-- Video / Sizzle Section -->
   <section class="py-12 px-4">
@@ -46,7 +134,7 @@
       <h2 class="text-3xl font-bold text-center mb-6">See SnapLayer in Action</h2>
       <div class="max-w-4xl mx-auto aspect-w-16 aspect-h-9 mb-4">
         <!-- Replace this iframe src with your actual video URL -->
-        <iframe class="w-full h-64 md:h-96 rounded-lg shadow-lg" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="SnapLayer Preview" frameborder="0" allowfullscreen></iframe>
+        <iframe class="w-full h-64 md:h-96 rounded-lg shadow-lg" src="https://www.youtube.com/embed/pdgUEnKbxhk" title="SnapLayer Preview" frameborder="0" allowfullscreen></iframe>
       </div>
       <p class="text-center text-sm text-gray-300">Placeholder video – replace with your sizzle reel or demos.</p>
     </div>
@@ -279,6 +367,26 @@
     </div>
   </footer>
 
-  <script src="js/main.js"></script>
+<!-- Sticky mini timer -->
+<div id="mini-timer" class="fixed bottom-6 right-6 hidden z-50">
+  <div class="timer-box">
+    <div id="mini-timer-display" class="timer-display"></div>
+  </div>
+</div>
+
+<!-- Dev controls (temporary) -->
+<div id="dev-panel" class="fixed bottom-6 left-6 z-50 bg-blue-900/80 backdrop-blur-sm border border-blue-700 rounded-lg p-3 flex flex-wrap gap-2">
+  <button id="dev-hour" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last hour timer</button>
+  <button id="dev-ten" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last 10 minutes timer</button>
+  <button id="dev-tensec" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last 10 seconds timer</button>
+  <button id="dev-explode" class="text-sm bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded">Explode now</button>
+  <button id="dev-reset" class="text-sm bg-slate-600 hover:bg-slate-500 text-white px-3 py-1 rounded">Reset simulation</button>
+</div>
+
+<!-- Explosion overlay -->
+<div id="explosion-overlay"></div>
+
+<script src="js/main.js"></script>
+
 </body>
 </html>
