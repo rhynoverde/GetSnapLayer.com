@@ -5,168 +5,280 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SnapLayer – Prelaunch Access</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* Custom styles (if needed) */
-  </style>
 </head>
 <body class="bg-blue-950 text-white font-sans">
-  <header class="py-6">
-    <div class="container mx-auto flex justify-center">
-      <img src="images/SnapLayer-Logo-whiteBlue-withWords.png" alt="SnapLayer logo with words" class="h-16">
+  <!-- Navigation & Logo -->
+  <header class="bg-blue-950 border-b border-blue-800">
+    <div class="container mx-auto flex justify-between items-center py-4 px-4">
+      <div class="flex items-center space-x-2">
+        <img src="images/SnapLayer-Logo-whiteBlue.png" alt="SnapLayer logo" class="h-10">
+        <span class="font-bold text-xl">SnapLayer</span>
+      </div>
+      <nav class="hidden md:flex space-x-6 text-sm">
+        <a href="index.html" class="hover:text-pink-400">Home</a>
+        <a href="gallery.html" class="hover:text-pink-400">Gallery</a>
+        <a href="usecases.html" class="hover:text-pink-400">Use Cases</a>
+        <a href="roadmap.html" class="hover:text-pink-400">Roadmap</a>
+        <a href="referral.html" class="hover:text-pink-400">Referral</a>
+        <a href="faq.html" class="hover:text-pink-400">FAQ</a>
+      </nav>
     </div>
   </header>
-  <section class="bg-blue-900 py-20 text-center px-4">
-    <h1 class="text-4xl md:text-5xl font-bold mb-4">Unlock Your Creativity with SnapLayer</h1>
-    <p class="text-xl md:text-2xl mb-6 max-w-3xl mx-auto">Generate personalized images from dynamic templates, automate your content creation and supercharge your referrals.</p>
-    <div class="flex justify-center items-center space-x-4 mb-6">
-      <span id="price" class="text-4xl font-extrabold"></span>
-      <span id="discount" class="text-xl"></span>
+
+  <!-- Hero Section -->
+  <section class="bg-blue-900 pt-16 pb-20 text-center px-4">
+    <h1 class="text-5xl font-extrabold mb-4">Unlock Your Creativity with SnapLayer</h1>
+    <p class="text-xl max-w-3xl mx-auto mb-6">Generate personalized images from dynamic templates, automate your content creation and supercharge your referrals.</p>
+    <div class="flex justify-center items-baseline space-x-4 mb-6">
+      <span class="text-5xl font-extrabold" id="price-solo"></span>
+      <span class="text-lg" id="discount-solo"></span>
     </div>
-    <div class="mb-4">
+    <div class="mb-6">
       <span id="timer" class="text-lg font-mono"></span>
       <p class="text-sm italic mt-1">Today's discount ends in</p>
     </div>
-    <a href="#pricing" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full text-lg font-semibold transition-colors">Get Prelaunch Access</a>
+    <a href="#plans" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full text-lg font-semibold transition-colors">Get Prelaunch Access</a>
   </section>
+
+  <!-- Video / Sizzle Section -->
+  <section class="py-12 px-4">
+    <div class="container mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-6">See SnapLayer in Action</h2>
+      <div class="max-w-4xl mx-auto aspect-w-16 aspect-h-9 mb-4">
+        <!-- Replace this iframe src with your actual video URL -->
+        <iframe class="w-full h-64 md:h-96 rounded-lg shadow-lg" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="SnapLayer Preview" frameborder="0" allowfullscreen></iframe>
+      </div>
+      <p class="text-center text-sm text-gray-300">Placeholder video – replace with your sizzle reel or demos.</p>
+    </div>
+  </section>
+
+  <!-- Features Section -->
   <section class="py-16 px-4" id="features">
     <div class="container mx-auto">
       <h2 class="text-3xl font-bold text-center mb-12">Why SnapLayer?</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <img src="images/api-generation-001.jpg" alt="API generation" class="w-24 h-24 object-cover rounded-lg shadow-lg">
+        <!-- Feature cards reused from previous version -->
+        <div class="flex flex-col md:flex-row items-start gap-6">
+          <img src="images/api-generation-001.jpg" alt="API generation" class="w-20 h-20 object-cover rounded-lg shadow-lg">
           <div>
             <h3 class="text-xl font-semibold mb-2">API Image Generation</h3>
             <p>Create images via simple API calls. Integrate SnapLayer into your apps and automate content creation at scale.</p>
           </div>
         </div>
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <img src="images/guided-image-acquisition-001.jpg" alt="Guided graphic acquisition" class="w-24 h-24 object-cover rounded-lg shadow-lg">
+        <div class="flex flex-col md:flex-row items-start gap-6">
+          <img src="images/guided-image-acquisition-001.jpg" alt="Guided image acquisition" class="w-20 h-20 object-cover rounded-lg shadow-lg">
           <div>
-            <h3 class="text-xl font-semibold mb-2">Guided Graphic Acquisition</h3>
+            <h3 class="text-xl font-semibold mb-2">Guided Image Acquisition</h3>
             <p>Search for logos and graphics from multiple sources. Our guided flow makes it easy to find and use assets in your designs.</p>
           </div>
         </div>
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <img src="images/logo-sources-001.jpg" alt="Logo sources" class="w-24 h-24 object-cover rounded-lg shadow-lg">
+        <div class="flex flex-col md:flex-row items-start gap-6">
+          <img src="images/logo-sources-001.jpg" alt="Logo sources" class="w-20 h-20 object-cover rounded-lg shadow-lg">
           <div>
             <h3 class="text-xl font-semibold mb-2">Logo Sources</h3>
             <p>Grab logos from Google, Yelp, Shopify and more. SnapLayer connects you with the most popular brand assets.</p>
           </div>
         </div>
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <img src="images/psd-import-002.jpg" alt="PSD imports" class="w-24 h-24 object-cover rounded-lg shadow-lg">
+        <div class="flex flex-col md:flex-row items-start gap-6">
+          <img src="images/psd-import-002.jpg" alt="PSD imports" class="w-20 h-20 object-cover rounded-lg shadow-lg">
           <div>
-            <h3 class="text-xl font-semibold mb-2">PSD Imports</h3>
-            <p>Import Photoshop files and turn them into dynamic templates. SnapLayer supports layered PSD conversion.</p>
+            <h3 class="text-xl font-semibold mb-2">PSD Import (Coming Soon)</h3>
+            <p>Import Photoshop files and turn them into dynamic templates. Flatten layers for best results. Feature launching soon.</p>
           </div>
         </div>
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <img src="images/snap-pages-002.jpg" alt="SnapPages editor" class="w-24 h-24 object-cover rounded-lg shadow-lg">
+        <div class="flex flex-col md:flex-row items-start gap-6">
+          <img src="images/snap-pages-002.jpg" alt="SnapPages" class="w-20 h-20 object-cover rounded-lg shadow-lg">
           <div>
-            <h3 class="text-xl font-semibold mb-2">SnapPages Editor</h3>
-            <p>Drag, drop and design with our intuitive editor. Adjust layers, text and images visually in your browser.</p>
+            <h3 class="text-xl font-semibold mb-2">SnapPages</h3>
+            <p>Generate personalized images from simple forms. Great for clients who need on‑the‑fly image creation.</p>
           </div>
         </div>
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <img src="images/snap-sheet-002.jpg" alt="SnapSheet bulk editing" class="w-24 h-24 object-cover rounded-lg shadow-lg">
+        <div class="flex flex-col md:flex-row items-start gap-6">
+          <img src="images/snap-sheet-002.jpg" alt="SnapSheet" class="w-20 h-20 object-cover rounded-lg shadow-lg">
           <div>
-            <h3 class="text-xl font-semibold mb-2">SnapSheet Bulk Editing</h3>
-            <p>Edit multiple images at once using our spreadsheet-like interface. Perfect for campaigns with dozens of variations.</p>
+            <h3 class="text-xl font-semibold mb-2">SnapSheet</h3>
+            <p>Upload a CSV and generate images in bulk. Perfect for campaigns with dozens or hundreds of variations.</p>
           </div>
         </div>
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <img src="images/text-on-curve-003.jpg" alt="Text on curve" class="w-24 h-24 object-cover rounded-lg shadow-lg">
+        <div class="flex flex-col md:flex-row items-start gap-6">
+          <img src="images/text-on-curve-003.jpg" alt="Text on curve" class="w-20 h-20 object-cover rounded-lg shadow-lg">
           <div>
             <h3 class="text-xl font-semibold mb-2">Text on Curve</h3>
-            <p>Give your text personality by curving it along paths. SnapLayer lets you tweak curve intensity and layout with ease.</p>
+            <p>Give your text personality by curving it along paths. Adjust curve intensity and layout with ease.</p>
           </div>
         </div>
-        <div class="flex flex-col md:flex-row items-center gap-6">
-          <img src="images/text-rotation-001.jpg" alt="Text rotation" class="w-24 h-24 object-cover rounded-lg shadow-lg">
+        <div class="flex flex-col md:flex-row items-start gap-6">
+          <img src="images/text-rotation-001.jpg" alt="Text rotation" class="w-20 h-20 object-cover rounded-lg shadow-lg">
           <div>
             <h3 class="text-xl font-semibold mb-2">Text Rotation</h3>
-            <p>Rotate text layers to any angle to create dynamic layouts. SnapLayer's controls make fine-tuning simple.</p>
+            <p>Rotate text layers to any angle to create dynamic layouts. SnapLayer's controls make fine‑tuning simple.</p>
           </div>
         </div>
       </div>
     </div>
   </section>
-  <section id="pricing" class="bg-blue-900 py-16 px-4">
+
+  <!-- Why Buy Now Section -->
+  <section class="bg-blue-900 py-16 px-4">
     <div class="container mx-auto text-center">
-      <h2 class="text-3xl font-bold mb-4">Prelaunch Pricing</h2>
-      <p class="mb-6">Join now and get early access at a special discount. The discount decreases by 1% each day – get in today before it’s gone!</p>
-      <div class="inline-block bg-blue-800 p-6 rounded-lg shadow-lg">
-        <span class="block text-sm text-gray-300 mb-1">Your price today</span>
-        <span id="priceLarge" class="block text-5xl font-extrabold mb-2"></span>
-        <span id="discountLarge" class="block text-lg"></span>
-      </div>
-      <div class="mt-8">
-        <a href="#" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full text-lg font-semibold transition-colors">Buy Now</a>
+      <h2 class="text-3xl font-bold mb-6">Why Buy Now?</h2>
+      <div class="max-w-3xl mx-auto space-y-4 text-left">
+        <p>🔥 <strong>Early means extra:</strong> Bigger discounts, more starting credits, and boosted referral rewards the earlier you buy.</p>
+        <p>🎯 <strong>Built for speed:</strong> Generate hundreds of custom images in minutes without design tools.</p>
+        <p>💰 <strong>Resell or reuse:</strong> Commercial rights included. Sell to clients or reuse templates endlessly.</p>
+        <p>🌐 <strong>Stack accounts:</strong> Want more limits? Stack as many LTDs as you like. Perfect for agencies.</p>
+        <p>🧩 <strong>Shape the product:</strong> Early adopters help prioritize the roadmap and earn rewards for feedback.</p>
       </div>
     </div>
   </section>
-  <section id="referral" class="py-16 px-4">
+
+  <!-- Pricing Plans Section -->
+  <section id="plans" class="py-16 px-4">
+    <div class="container mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-8">Choose Your Plan</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Solo Plan -->
+        <div class="bg-blue-900 p-6 rounded-lg shadow-lg flex flex-col">
+          <h3 class="text-xl font-bold mb-2">Solo</h3>
+          <div class="mb-4">
+            <span class="line-through text-gray-400">$49</span>
+            <span class="text-4xl font-extrabold ml-2 price-solo"></span>
+            <span class="block text-sm discount-solo"></span>
+          </div>
+          <ul class="text-sm space-y-2 flex-1">
+            <li>Up to 3 templates</li>
+            <li>5 text + 3 image fields per template</li>
+            <li>Up to 50 rows per SnapSheet</li>
+            <li>250 images/month + Prelaunch bonus</li>
+            <li>SnapLinks</li>
+            <li>No API / SnapPages / PSD import</li>
+            <li>1 GB storage</li>
+          </ul>
+          <a href="#" class="mt-6 bg-pink-500 hover:bg-pink-600 text-white py-2 px-4 rounded-md text-center">Buy LTD</a>
+        </div>
+        <!-- Plus Plan -->
+        <div class="bg-blue-900 p-6 rounded-lg shadow-lg flex flex-col">
+          <h3 class="text-xl font-bold mb-2">Plus</h3>
+          <div class="mb-4">
+            <span class="line-through text-gray-400">$149</span>
+            <span class="text-4xl font-extrabold ml-2 price-plus"></span>
+            <span class="block text-sm discount-plus"></span>
+          </div>
+          <ul class="text-sm space-y-2 flex-1">
+            <li>10 templates</li>
+            <li>10 text + 5 image fields per template</li>
+            <li>Up to 250 rows per SnapSheet</li>
+            <li>1,000 images/month + bonus</li>
+            <li>10 SnapPages</li>
+            <li>PSD import</li>
+            <li>No subaccounts / white‑label / API</li>
+            <li>5 GB storage</li>
+          </ul>
+          <a href="#" class="mt-6 bg-pink-500 hover:bg-pink-600 text-white py-2 px-4 rounded-md text-center">Buy LTD</a>
+        </div>
+        <!-- Pro Plan -->
+        <div class="bg-blue-900 p-6 rounded-lg shadow-lg flex flex-col">
+          <h3 class="text-xl font-bold mb-2">Pro</h3>
+          <div class="mb-4">
+            <span class="line-through text-gray-400">$299</span>
+            <span class="text-4xl font-extrabold ml-2 price-pro"></span>
+            <span class="block text-sm discount-pro"></span>
+          </div>
+          <ul class="text-sm space-y-2 flex-1">
+            <li>Unlimited templates</li>
+            <li>15 text + 10 image fields per template</li>
+            <li>Up to 1,000 rows per SnapSheet</li>
+            <li>5,000 images/month + bonus</li>
+            <li>Unlimited SnapPages</li>
+            <li>10 subaccounts</li>
+            <li>White‑label + API access</li>
+            <li>20 GB storage</li>
+          </ul>
+          <a href="#" class="mt-6 bg-pink-500 hover:bg-pink-600 text-white py-2 px-4 rounded-md text-center">Buy LTD</a>
+        </div>
+        <!-- Agency Plan -->
+        <div class="bg-blue-900 p-6 rounded-lg shadow-lg flex flex-col">
+          <h3 class="text-xl font-bold mb-2">Agency</h3>
+          <div class="mb-4">
+            <span class="line-through text-gray-400">$499</span>
+            <span class="text-4xl font-extrabold ml-2 price-agency"></span>
+            <span class="block text-sm discount-agency"></span>
+          </div>
+          <ul class="text-sm space-y-2 flex-1">
+            <li>Unlimited templates</li>
+            <li>Unlimited text + image fields (within capacity)</li>
+            <li>Up to 1,000 rows per SnapSheet</li>
+            <li>10,000 images/month + bonus</li>
+            <li>Unlimited SnapPages</li>
+            <li>Unlimited subaccounts</li>
+            <li>White‑label + API access + Team collaboration</li>
+            <li>100 GB storage</li>
+          </ul>
+          <a href="#" class="mt-6 bg-pink-500 hover:bg-pink-600 text-white py-2 px-4 rounded-md text-center">Buy LTD</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Roadmap Preview -->
+  <section class="bg-blue-900 py-16 px-4">
+    <div class="container mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-6">Roadmap Preview</h2>
+      <ul class="max-w-2xl mx-auto space-y-4">
+        <li><span class="font-bold">Early August:</span> Beta dashboard + editor opens</li>
+        <li><span class="font-bold">Launch Day:</span> SnapPages, SnapSheet, SnapLinks</li>
+        <li><span class="font-bold">After Launch:</span> PSD import, Google Sheets, Zapier/Make/Pabbly integrations, full API</li>
+        <li><span class="font-bold">Voting:</span> Vote on features and prioritization on our Roadmap page</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Referral Program -->
+  <section class="py-16 px-4">
     <div class="container mx-auto">
       <h2 class="text-3xl font-bold text-center mb-4">Earn More with Referrals</h2>
-      <p class="text-center max-w-2xl mx-auto mb-6">Invite your friends and colleagues to SnapLayer. When they purchase, you'll both lock in our maximum 50% discount. Share your referral code after checkout and claim the difference automatically.</p>
+      <p class="text-center max-w-2xl mx-auto mb-4">Invite your friends and colleagues to SnapLayer. When they purchase, you both get an extra 10% of your plan limits. Your code doesn’t give a discount — it gives more power. Share your referral code after checkout or come back later to redeem one.</p>
     </div>
   </section>
-  <section id="faq" class="bg-blue-900 py-16 px-4">
+
+  <!-- FAQ Teaser -->
+  <section class="bg-blue-900 py-16 px-4">
     <div class="container mx-auto">
-      <h2 class="text-3xl font-bold text-center mb-4">Frequently Asked Questions</h2>
+      <h2 class="text-3xl font-bold text-center mb-6">Frequently Asked Questions</h2>
       <div class="max-w-3xl mx-auto space-y-4">
         <div>
-          <h3 class="font-semibold">What is SnapLayer?</h3>
-          <p>SnapLayer is a platform that lets you generate personalized images from dynamic templates. Import PSDs, customize layouts and generate images via our API or bulk editor.</p>
+          <h3 class="font-semibold">What’s the risk in buying now?</h3>
+          <p>You’ll have 30 days AFTER launch to request a refund if SnapLayer isn’t right for you. Zero pressure, zero risk.</p>
         </div>
         <div>
-          <h3 class="font-semibold">How does the daily discount work?</h3>
-          <p>Each day of the prelaunch, the discount decreases by 1%. If today is day one, you get 50% off. Day two is 49%, and so on. Referral codes always lock in a 50% discount.</p>
+          <h3 class="font-semibold">Can I sell or transfer my account?</h3>
+          <p>Yes! You can change your email and resell or transfer your license at any time. Buy as many accounts as you like.</p>
         </div>
         <div>
-          <h3 class="font-semibold">How do referrals work?</h3>
-          <p>Share your unique referral code after purchase. If someone buys using your code, you both get half-off. If you already purchased at a lower discount, we'll refund the difference up to 50%.</p>
+          <h3 class="font-semibold">Do unused credits roll over?</h3>
+          <p>Normally credits reset monthly, but prelaunch buyers get rollover up to 5× their monthly limit. A true prelaunch perk.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold">Will you support video or GIF generation?</h3>
+          <p>No — SnapLayer is focused on static images. Future video tools may come through EmbrFyr, and prelaunch buyers will have first access.</p>
         </div>
       </div>
+      <p class="text-center mt-6"><a href="faq.html" class="underline text-pink-400">View all FAQs</a></p>
     </div>
   </section>
-  <footer class="bg-blue-950 py-6 px-4">
+
+  <!-- Footer -->
+  <footer class="bg-blue-950 py-8 px-4 border-t border-blue-800">
     <div class="container mx-auto text-center">
       <p class="mb-4">Subscribe for updates and launch news</p>
       <form class="flex flex-col md:flex-row justify-center items-center space-y-2 md:space-y-0 md:space-x-4">
         <input type="email" placeholder="Enter your email" class="px-4 py-2 rounded-md w-64 text-black" required>
         <button type="submit" class="bg-pink-500 hover:bg-pink-600 px-6 py-2 rounded-md">Subscribe</button>
       </form>
-      <p class="text-xs text-gray-400 mt-4">© 2025 SnapLayer. All rights reserved. <a href="#" class="underline">Terms of Service</a></p>
+      <p class="text-xs text-gray-400 mt-4">© 2025 SnapLayer by EmbrFyr — <a href="https://embrfyr.com" target="_blank" class="underline">EmbrFyr.com</a>. All rights reserved.</p>
     </div>
   </footer>
-  <script>
-    const prelaunchStart = new Date("2025-07-27T00:00:00-06:00"); // Mountain Time start date
-    const basePrice = 100; // adjust base price as needed
-    function updatePricing() {
-      const now = new Date();
-      const daysElapsed = Math.floor((now - prelaunchStart) / (1000 * 60 * 60 * 24));
-      const discount = Math.max(50 - daysElapsed, 0);
-      const finalPrice = (basePrice * (1 - discount / 100)).toFixed(2);
-      document.getElementById("price").textContent = "$" + finalPrice;
-      document.getElementById("discount").textContent = "(" + discount + "% off)";
-      document.getElementById("priceLarge").textContent = "$" + finalPrice;
-      document.getElementById("discountLarge").textContent = discount + "% off";
-    }
-    function updateTimer() {
-      const now = new Date();
-      // time until midnight local time (America/Denver)
-      const midnight = new Date(now);
-      midnight.setHours(24, 0, 0, 0);
-      const diff = midnight - now;
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-      document.getElementById("timer").textContent = `${String(hours).padStart(2,"0")}:${String(minutes).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
-    }
-    updatePricing();
-    updateTimer();
-    setInterval(updateTimer, 1000);
-  </script>
+
+  <script src="js/main.js"></script>
 </body>
 </html>
