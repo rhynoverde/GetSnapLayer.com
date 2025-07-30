@@ -52,7 +52,32 @@ function updatePricing() {
     const tomorrowDiscount = Math.max(0, discount - 1);
     tomorrowLine.textContent = `Tomorrow's discount will be ${tomorrowDiscount}% and limits will decrease.`;
   }
+
+  updatePlanBonuses();
 }
+
+function updatePlanBonuses() {
+  const base = { solo: 250, plus: 1000, pro: 5000, agency: 10000 };
+  const startBonus = { solo: 200, plus: 200, pro: 1000, agency: 2000 }; // Day 1
+  const now = new Date();
+  const daysElapsed = Math.max(0, Math.floor((now - prelaunchStart) / 86400000)); // Day 0-based
+  const currentBonus = {};
+  Object.keys(startBonus).forEach(tier => {
+    const start = startBonus[tier];
+    const drop = Math.round(start * 0.02 * daysElapsed); // 2% of starting bonus per day
+    currentBonus[tier] = Math.max(0, start - drop);
+  });
+
+  document.querySelectorAll('.plan-base').forEach(el => {
+    const tier = el.getAttribute('data-tier');
+    if (tier && base[tier] != null) el.textContent = base[tier];
+  });
+  document.querySelectorAll('.plan-bonus').forEach(el => {
+    const tier = el.getAttribute('data-tier');
+    if (tier && currentBonus[tier] != null) el.textContent = currentBonus[tier];
+  });
+}
+
 
 // --- Time helpers / formatting ---
 function msUntilMidnight(now = new Date()) {
@@ -79,7 +104,7 @@ function applyTimerEffects(remainingMs) {
 
   const inLastHour = remainingMs <= 3600000 && remainingMs > 0;
   const inLastTenMin = remainingMs <= 600000 && remainingMs > 0;
-  const inLastTenSec = remainingMs <= 10000 && remainingMs > 0;
+  const inLastTenSec = remainingMs <= 60000 && remainingMs > 0;
 
   const apply = (el) => {
     if (!el) return;
@@ -194,10 +219,46 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnTenSec = document.getElementById('dev-tensec');
   const btnReset = document.getElementById('dev-reset');
   const btnExplode = document.getElementById('dev-explode');
+  const btnHide = document.getElementById('dev-hide');
+  const btnShow = document.getElementById('dev-show');
+  const devPanel = document.getElementById('dev-panel');
 
   if (btnHour) btnHour.addEventListener('click', () => { dev.forceRemainingSec = 3600; updateTimer(); });
   if (btnTen) btnTen.addEventListener('click', () => { dev.forceRemainingSec = 600; updateTimer(); });
   if (btnTenSec) btnTenSec.addEventListener('click', () => { dev.forceRemainingSec = 10; updateTimer(); });
   if (btnReset) btnReset.addEventListener('click', () => { dev.forceRemainingSec = null; updateTimer(); });
   if (btnExplode) btnExplode.addEventListener('click', () => { dev.forceRemainingSec = 0; updateTimer(); });
+  if (btnHide && btnShow && devPanel) {
+    btnHide.addEventListener('click', () => { devPanel.classList.add('hidden'); btnShow.classList.remove('hidden'); });
+    btnShow.addEventListener('click', () => { devPanel.classList.remove('hidden'); btnShow.classList.add('hidden'); });
+  }
+
+  // Image style toggle for "Why Buy Now?" artwork
+  const toggle = document.getElementById('style-toggle');
+  const imageMap = {
+    'built-for-speed': { uniform: 'images/built-for-speed-uniform-style.jpg', alt: 'images/built-for-speed-style-002.jpg' },
+    'reuse-or-resell': { uniform: 'images/resell-or-reuse-uniform-style.jpg', alt: 'images/reuse-or-resell-style-002.jpg' },
+    'stack-accounts': { uniform: 'images/stack-accounts-uniform-style.jpg', alt: 'images/stack-accounts-style-002.jpg' },
+    'shape-the-product': { uniform: 'images/shape-the-product-uniform-style.jpg', alt: 'images/shape-the-project-style-002.jpg' }
+  };
+  let useAlt = false;
+  const applyStyle = () => {
+    Object.entries(imageMap).forEach(([key, paths]) => {
+      const img = document.querySelector(`img[data-key="${key}"]`);
+      if (img) img.src = useAlt ? paths.alt : paths.uniform;
+    });
+  };
+  if (toggle) {
+    toggle.addEventListener('click', () => { useAlt = !useAlt; applyStyle(); toggle.textContent = useAlt ? 'Show Uniform Style' : 'Show Style 002'; });
+    applyStyle();
+  }
+
+  // Reveal-on-scroll for features
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) e.target.classList.add('opacity-100', 'translate-y-0');
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
 });
+
