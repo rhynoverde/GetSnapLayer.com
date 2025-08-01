@@ -480,9 +480,69 @@
 <!-- Explosion overlay -->
 <div id="explosion-overlay"></div>
 
+<!-- Referral Code Modal -->
+<div id="referral-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+  <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-md">
+    <h3 class="text-2xl font-bold mb-3 text-center">Enter a referral code (optional)</h3>
+    <p class="text-sm text-blue-200 mb-4 text-center">
+      Don’t have one? No worries — referral codes can be entered <strong>after purchase</strong> and all benefits will be applied to your account.
+      We’ll send tips on finding a code once your purchase is complete.
+    </p>
+    <input id="referral-code-input" type="text" placeholder="Referral code"
+           class="w-full p-3 mb-4 rounded-md text-black">
+    <div id="stack-count-wrap" class="hidden mb-4">
+      <label for="stack-count" class="block text-sm mb-1">How many Agency licenses do you want to stack?</label>
+      <select id="stack-count" class="w-full p-3 rounded-md text-black">
+        <option value="1">1 (no stack)</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+        <option value="11">11</option>
+        <option value="12">12</option>
+        <option value="13">13</option>
+        <option value="14">14</option>
+        <option value="15">15</option>
+        <option value="16">16</option>
+        <option value="17">17</option>
+        <option value="18">18</option>
+        <option value="19">19</option>
+        <option value="20">20</option>
+        <option value="21">21</option>
+        <option value="22">22</option>
+        <option value="23">23</option>
+        <option value="24">24</option>
+        <option value="25">25</option>
+        <option value="26">26</option>
+        <option value="27">27</option>
+        <option value="28">28</option>
+        <option value="29">29</option>
+        <option value="30">30</option>
+      </select>
+      
+      <p class="text-xs text-blue-300 mt-2">You can keep stacking during prelaunch. New stacks use that day’s discount & bonuses.</p>
+    </div>
+    <div class="flex flex-col-reverse sm:flex-row justify-end gap-3">
+      <button id="referral-skip" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">
+        Proceed without Code, I Will Add One Later
+      </button>
+      <button id="referral-continue" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">
+        Code Entered, Continue to Checkout
+      </button>
+    </div>
+  </div>
+</div>
+
 <button id="dev-show" class="fixed bottom-6 left-6 z-40 hidden bg-blue-700 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded">Show Dev</button>
 
 <script src="js/main.js"></script>
+<script>window.SNAP_API_BASE = 'http://localhost:4242';</script>
+<script src="js/checkout.js"></script>
 
 </body>
 </html>
