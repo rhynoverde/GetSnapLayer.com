@@ -22,10 +22,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedTier  = null;
   
     function openModal(tier) {
-      selectedTier = tier;
-      input.value  = '';
-      stackWrap.classList.toggle('hidden', tier !== 'agency');
-      modal.classList.remove('hidden');
+        selectedTier = tier;
+        input.value  = '';
+        stackWrap.classList.remove('hidden');
+        modal.classList.remove('hidden');
     }
     function hideModal() { modal.classList.add('hidden'); }
   
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const payload = {
             tier        : selectedTier,
             referralCode: referralCode || '',
-            agencyStack : selectedTier === 'agency' ? Math.max(1, parseInt(stackSelect.value || '1', 10)) : 1,
+            stackCount  : Math.max(1, parseInt(stackSelect.value || '1', 10)),
             promoCode   : window.SNAP_PROMO_CODE || ''
           };
         const r  = await fetch((window.SNAP_API_BASE || '') + '/api/create-checkout-session', {
