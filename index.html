@@ -491,8 +491,7 @@
     <input id="referral-code-input" type="text" placeholder="Referral code"
            class="w-full p-3 mb-4 rounded-md text-black">
     <div id="stack-count-wrap" class="hidden mb-4">
-      <label for="stack-count" c      <label for="stack-count" class="block text-sm mb-1">How many licenses do you want to stack for this plan?</label>
-      lass="block text-sm mb-1">How many Agency licenses do you want to stack?</label>
+      <label for="stack-count" class="block text-sm mb-1">How many licenses do you want to stack for this plan?</label>
       <select id="stack-count" class="w-full p-3 rounded-md text-black">
         <option value="1">1 (no stack)</option>
         <option value="2">2</option>
@@ -538,6 +537,33 @@
     </div>
   </div>
 </div>
+
+<!-- Pricing & Payment Plans Modal -->
+<div id="plan-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
+  <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-2xl">
+    <h3 class="text-2xl font-bold mb-2 text-center">Choose how you want to pay</h3>
+    <p id="plan-summary" class="text-sm text-blue-200 mb-4 text-center"></p>
+
+    <div id="plan-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4"></div>
+
+    <div class="bg-blue-800/60 rounded-md p-3 mb-4">
+      <p class="text-xs text-blue-100">
+        If a payment plan payment fails and isn’t resolved within 30 days, your account will be reduced to the
+        largest tier/stack fully covered by the payments received (minus the plan’s added percentage) until you
+        catch up. By proceeding, you agree to these terms.
+      </p>
+    </div>
+
+    <div class="flex flex-col sm:flex-row justify-end gap-3">
+      <button id="plan-other" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">Pay another way</button>
+      <button id="plan-pay" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">Pay with card</button>
+      <button id="plan-cancel" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-md">Back</button>
+    </div>
+  </div>
+</div>
+
+
+
 
 <button id="dev-show" class="fixed bottom-6 left-6 z-40 hidden bg-blue-700 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded">Show Dev</button>
 

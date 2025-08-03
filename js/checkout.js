@@ -20,6 +20,160 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnGo       = document.getElementById('referral-continue');
   
     let selectedTier  = null;
+
+const planModal   = document.getElementById('plan-modal');
+const planGrid    = document.getElementById('plan-grid');
+const planSummary = document.getElementById('plan-summary');
+const btnPlanPay  = document.getElementById('plan-pay');
+const btnPlanBack = document.getElementById('plan-cancel');
+const btnPlanOther= document.getElementById('plan-other');
+
+let selectedInstallments = 1;
+let lastOptions = null;
+let lastReferral = '';
+let lastStack = 1;
+
+function showPlanModal() { planModal && planModal.classList.remove('hidden'); }
+function hidePlanModal() { planModal && planModal.classList.add('hidden'); }
+function disablePlanButtons(disabled) {
+  if (btnPlanPay)   btnPlanPay.disabled   = disabled;
+  if (btnPlanBack)  btnPlanBack.disabled  = disabled;
+  if (btnPlanOther) btnPlanOther.disabled = disabled;
+}
+
+async function openPlanModal(referral) {
+  lastReferral = referral || '';
+  lastStack    = Math.max(1, parseInt(stackSelect.value || '1', 10));
+  disablePlanButtons(true);
+  planGrid.innerHTML = '';
+  planSummary.textContent = 'Calculating your one-time price and available payment plans...';
+  showPlanModal();
+
+  const payload = {
+    tier: selectedTier,
+    referralCode: lastReferral,
+    stackCount: lastStack,
+    promoCode: window.SNAP_PROMO_CODE || ''
+  };
+
+  try {
+    const r = await fetch((window.SNAP_API_BASE || '') + '/api/pricing-options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+
+    lastOptions = data;
+    planSummary.textContent = `Plan: ${data.tierLabel} · Stack: ${data.stackCount} · Today’s discount: ${data.discountPct}%`;
+
+    // Build cards
+    const cards = [];
+    // One-time
+    cards.push({
+      label: 'Pay in full',
+      sub: data.oneTime.note,
+      installments: 1,
+      amount: data.oneTime.totalFormatted
+    });
+    // Installments
+    data.installments.forEach(opt => {
+      cards.push({
+        label: `${opt.installments} payments`,
+        sub: `${opt.perPaymentFormatted} / month`,
+        installments: opt.installments,
+        amount: opt.totalWithFeeFormatted
+      });
+    });
+
+    planGrid.innerHTML = cards.map(c => `
+      <button data-inst="${c.installments}" class="block text-left bg-blue-800/60 hover:bg-blue-700 rounded-lg p-4 border border-blue-700">
+        <div class="text-lg font-semibold">${c.label}</div>
+        <div class="text-sm text-blue-200">${c.sub}</div>
+        <div class="mt-1 text-sm text-blue-300">Total: ${c.amount}</div>
+      </button>
+    `).join('');
+
+    Array.from(planGrid.querySelectorAll('button[data-inst]')).forEach(btn => {
+      btn.addEventListener('click', () => {
+        Array.from(planGrid.querySelectorAll('button[data-inst]')).forEach(b => b.classList.remove('ring-2', 'ring-pink-400'));
+        btn.classList.add('ring-2', 'ring-pink-400');
+        selectedInstallments = parseInt(btn.getAttribute('data-inst') || '1', 10);
+      });
+    });
+
+    selectedInstallments = 1; // default
+    disablePlanButtons(false);
+  } catch (e) {
+    planSummary.textContent = 'Could not calculate options. Please try again.';
+    disablePlanButtons(false);
+  }
+}
+
+btnPlanBack && btnPlanBack.addEventListener('click', () => {
+  hidePlanModal();
+});
+
+btnPlanPay && btnPlanPay.addEventListener('click', async () => {
+  disablePlanButtons(true);
+  try {
+    const payload = {
+      tier        : selectedTier,
+      referralCode: lastReferral,
+      stackCount  : lastStack,
+      installments: selectedInstallments,
+      promoCode   : window.SNAP_PROMO_CODE || ''
+    };
+    const r  = await fetch((window.SNAP_API_BASE || '') + '/api/create-plan-checkout', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (data?.url) {
+      window.location.href = data.url;
+    } else {
+      alert('Could not start checkout. Please try again.');
+      disablePlanButtons(false);
+    }
+  } catch {
+    alert('Something went wrong. Please try again.');
+    disablePlanButtons(false);
+  }
+});
+
+btnPlanOther && btnPlanOther.addEventListener('click', async () => {
+  disablePlanButtons(true);
+  const email = prompt('Enter your email so we can send your manual invoice / instructions:');
+  if (!email) { disablePlanButtons(false); return; }
+  const phone = prompt('Phone (optional, for faster coordination):') || '';
+  try {
+    const payload = {
+      tier        : selectedTier,
+      referralCode: lastReferral,
+      stackCount  : lastStack,
+      installments: selectedInstallments,
+      email,
+      phone
+    };
+    const r = await fetch((window.SNAP_API_BASE || '') + '/api/alt-pay-request', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (data?.reference) {
+      alert('Thanks! Your reference code is ' + data.reference + '. Please post it in the Facebook group so an admin can invoice you, or email sales@snaplayer.com with this reference.');
+      hidePlanModal();
+    } else {
+      alert('Could not record your request. Please try again.');
+    }
+  } catch {
+    alert('Could not record your request. Please try again.');
+  } finally {
+    disablePlanButtons(false);
+  }
+});
   
     function openModal(tier) {
         selectedTier = tier;
@@ -32,12 +186,13 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
   
     btnSkip.addEventListener('click', async () => {
-      await goToCheckout('');
-    });
-  
-    btnGo.addEventListener('click', async () => {
-      await goToCheckout(input.value.trim());
-    });
+        await openPlanModal('');
+      });
+      
+      btnGo.addEventListener('click', async () => {
+        await openPlanModal(input.value.trim());
+      });
+      
   
     async function goToCheckout(referralCode) {
       btnSkip.disabled = true; btnGo.disabled = true;

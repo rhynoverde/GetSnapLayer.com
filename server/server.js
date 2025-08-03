@@ -26,11 +26,13 @@ function calcBonus(tier, now = new Date()) {
 }
 
 const T = {
-    purchasers: process.env.NOCO_TABLE_PURCHASERS || 'ltd_purchasers',
-    owners: process.env.NOCO_TABLE_OWNERS || 'ltd_referral_owners',
-    codes: process.env.NOCO_TABLE_CODES || 'ltd_referral_codes',
-    redemptions: process.env.NOCO_TABLE_REDEMPTIONS || 'ltd_referral_redemptions',
-    licenses: process.env.NOCO_TABLE_LICENSES || 'ltd_licenses'
+    purchasers   : process.env.NOCO_TABLE_PURCHASERS    || 'ltd_purchasers',
+    owners       : process.env.NOCO_TABLE_OWNERS        || 'ltd_referral_owners',
+    codes        : process.env.NOCO_TABLE_CODES         || 'ltd_referral_codes',
+    redemptions  : process.env.NOCO_TABLE_REDEMPTIONS   || 'ltd_referral_redemptions',
+    licenses     : process.env.NOCO_TABLE_LICENSES      || 'ltd_licenses',
+    altpay       : process.env.NOCO_TABLE_ALTPAY        || 'alt_pay_requests',
+    creditsLedger: process.env.NOCO_TABLE_CREDITS_LEDGER|| 'ltd_credits_ledger'
 };
 
 const app = express();
@@ -211,31 +213,48 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
     if (event.type === 'checkout.session.completed') {
         const s = event.data.object;
         console.log('💡 Webhook received: checkout.session.completed', s.id, 'evt:', event.id);
-
+      
         const key = s.id;
         if (processedSessions.has(key)) {
-            console.log('↪️ already processed session', key);
-            return res.json({ received: true });
+          console.log('↪️ already processed session', key);
+          return res.json({ received: true });
         }
         if (inflightSessions.has(key)) {
-            console.log('↪️ processing in flight for session', key);
-            return res.json({ received: true });
+          console.log('↪️ processing in flight for session', key);
+          return res.json({ received: true });
         }
-
-        // schedule background processing and respond immediately
+      
         const task = (async () => {
-            try {
-                await handleCheckoutCompleted(s);
-                processedSessions.add(key);
-            } catch (e) {
-                console.error('processing error', e.response?.data || e.message);
-            } finally {
-                inflightSessions.delete(key);
+          try {
+            // If this is an installment subscription, create a schedule to auto-cancel after N cycles
+            const installments = parseInt(s.metadata?.installments || '1', 10);
+            if (s.mode === 'subscription' && s.subscription && installments > 1) {
+              try {
+                await stripe.subscriptionSchedules.create({
+                  from_subscription: s.subscription,
+                  end_behavior: 'cancel',
+                  phases: [{
+                    items: [{ price: event.data.object.display_items?.[0]?.price?.id || undefined, quantity: 1 }],
+                    iterations: installments
+                  }]
+                });
+              } catch (e) {
+                console.error('schedule create error', e.message);
+              }
             }
+      
+            await handleCheckoutCompleted(s);
+            processedSessions.add(key);
+          } catch (e) {
+            console.error('processing error', e.response?.data || e.message);
+          } finally {
+            inflightSessions.delete(key);
+          }
         })();
-
+      
         inflightSessions.set(key, task);
-    }
+      }
+      
 
     // Always respond 2xx quickly so Stripe does not retry
     return res.json({ received: true });
@@ -244,6 +263,32 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
 /* JSON parser AFTER webhook */
 app.use(express.json());
 app.get('/health', (req, res) => res.send('ok'));
+
+app.post('/api/alt-pay-request', async (req, res) => {
+  try {
+    const { tier, referralCode = '', stackCount = 1, installments = 1, email = '', phone = '' } = req.body || {};
+    if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
+    if (!email) return res.status(400).json({ error: 'email_required' });
+
+    const ref = 'ALT-' + Math.random().toString(36).slice(2, 10).toUpperCase();
+    const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+    await axios.post(`${process.env.NOCO_API_URL}/${T.altpay}`, {
+      reference: ref,
+      email,
+      phone,
+      tier,
+      stack_count: Math.max(1, parseInt(stackCount || 1, 10)),
+      installments: Math.max(1, parseInt(installments || 1, 10)),
+      referral_code_entered: referralCode || '',
+      created_ts: new Date().toISOString(),
+      status: 'open'
+    }, headers);
+
+    res.json({ ok: true, reference: ref });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
+  }
+});
 
 app.get('/checkout-success', async (req, res) => {
     const sessionId = req.query.session_id || '';
@@ -308,8 +353,8 @@ app.post('/api/referrals/generate', async (req, res) => {
         }
 
         // create a new code
-        const token = Math.random().toString(36).slice(2, 10).toUpperCase();
-        const code = `${ownerEmail.split('@')[0].slice(0, 6).toUpperCase()}-${token}`;
+        const token = Math.random().toString(36).slice(2, 8).toUpperCase();
+        const code = `SL-${token}`;       
         await axios.post(`${process.env.NOCO_API_URL}/${T.codes}`, {
             code, owner_email: ownerEmail, issued_date: today, status: 'issued'
         }, headers);
@@ -480,73 +525,235 @@ app.get('/api/referrals/history', async (req, res) => {
 });
 
 
-/* Create Checkout Session (dynamic price; optional referral coupon; optional agency stack) */
-app.post('/api/create-checkout-session', async (req, res) => {
+/* Price options (one-time + payment plans) */
+app.post('/api/pricing-options', async (req, res) => {
+    try {
+      const { tier, referralCode, stackCount = 1, promoCode } = req.body || {};
+      if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
+  
+      const now = new Date();
+      let discountPct   = calcDiscount(now);
+      let referralValid = false;
+      let refOwnerEmail = '';
+  
+      if (referralCode && referralCode.toUpperCase() === 'SNAP10') {
+        referralValid = true;
+      } else if (referralCode) {
+        try {
+          const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
+          referralValid = !!r.data.valid;
+          refOwnerEmail = r.data.ownerEmail || '';
+        } catch {}
+      }
+      if (referralValid) discountPct = 50;
+  
+      const qty   = Math.max(1, parseInt(stackCount || 1, 10));
+      const base  = BASE_PRICES[tier] * qty;
+      const total = +(base * (1 - discountPct / 100)).toFixed(2);
+  
+      const bonus = calcBonus(tier, now);
+      const referralExtraPerUnit = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
+      const referralExtraTotal   = referralExtraPerUnit * qty;
+  
+      const oneTime = {
+        total,
+        totalFormatted: `$${total.toFixed(2)}`,
+        note: 'Pay once, own for life'
+      };
+  
+      const installmentsList = [];
+      for (let n = 2; n <= 12; n++) {
+        const addPct = 0.04 + (0.02 * n);
+        const gross  = +(total * (1 + addPct)).toFixed(2);
+        const per    = +(gross / n).toFixed(2);
+  
+        const allowSpecial2 = (total > 50 && total <= 100 && n === 2);
+        if (per >= 40 || allowSpecial2) {
+          const perInstallmentCredits = referralValid ? Math.floor(referralExtraTotal / n) : 0;
+          installmentsList.push({
+            installments: n,
+            perPayment: per,
+            totalWithFee: gross,
+            perPaymentFormatted: `$${per.toFixed(2)}`,
+            totalWithFeeFormatted: `$${gross.toFixed(2)}`,
+            approxCreditsPerPayment: perInstallmentCredits
+          });
+        }
+      }
+  
+      res.json({
+        tier,
+        tierLabel: tier.charAt(0).toUpperCase() + tier.slice(1),
+        stackCount: qty,
+        discountPct,
+        referralValid,
+        referralCode: referralValid ? referralCode : '',
+        bonus,
+        referralExtraPerUnit,
+        referralExtraTotal,
+        oneTime,
+        installments: installmentsList
+      });
+    } catch (e) {
+      res.status(500).json({ error: 'server_error', detail: e.message });
+    }
+  });
+  
+  /* Create Checkout Session (dynamic price; optional referral coupon; optional agency stack) */
+  app.post('/api/create-checkout-session', async (req, res) => {
+    // kept for backward compatibility (one-time path). Prefer /api/create-plan-checkout.
     const { tier, referralCode, stackCount = 1, promoCode } = req.body;
     if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
-
+  
     const now = new Date();
-    let discountPct = calcDiscount(now);
+    let discountPct   = calcDiscount(now);
     let referralValid = false;
     let refOwnerEmail = '';
-
-    // Temporary: allow SNAP10 during test
+  
     if (referralCode && referralCode.toUpperCase() === 'SNAP10') {
-        referralValid = true;
+      referralValid = true;
     } else if (referralCode) {
-        try {
-            const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
-            referralValid = !!r.data.valid;
-            refOwnerEmail = r.data.ownerEmail || '';
-        } catch { }
+      try {
+        const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
+        referralValid = !!r.data.valid;
+        refOwnerEmail = r.data.ownerEmail || '';
+      } catch {}
     }
-
     if (referralValid) discountPct = 50;
-
+  
     const unitAmount = Math.round(BASE_PRICES[tier] * 100 * (1 - discountPct / 100));
-    const bonus = calcBonus(tier, now);
-    const refExtra = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
-    const qty = Math.max(1, parseInt(stackCount || 1, 10));
-
+    const bonus      = calcBonus(tier, now);
+    const refExtra   = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
+    const qty        = Math.max(1, parseInt(stackCount || 1, 10));
+  
     try {
-        const discounts = [];
-        if (promoCode) {
-            discounts.push({ promotion_code: promoCode });
-        }
-
-        const session = await stripeClient.checkout.sessions.create({
-            mode: 'payment',
-            line_items: [{
-
-                quantity: qty,
-                price_data: {
-                    currency: 'usd',
-                    product: PRODUCT_IDS[tier],
-                    unit_amount: unitAmount
-                }
-            }],
-            discounts,
-            allow_promotion_codes: true,
-            metadata: {
-                tier,
-                baseCredits: BASE_CREDITS[tier],
-                bonusCredits: bonus,
-                referralExtra: refExtra,
-                referralCodeUsed: referralValid ? referralCode : '',
-                refOwnerEmail: referralValid ? refOwnerEmail : '',
-                stack_count: qty,
-                agency_stacked: qty
-            },
-
-            success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
-        });
-
-        res.json({ url: session.url });
+      const discounts = [];
+      if (promoCode) discounts.push({ promotion_code: promoCode });
+  
+      const session = await stripeClient.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [{
+          quantity: qty,
+          price_data: { currency: 'usd', product: PRODUCT_IDS[tier], unit_amount: unitAmount }
+        }],
+        discounts,
+        allow_promotion_codes: true,
+        metadata: {
+          tier,
+          baseCredits      : BASE_CREDITS[tier],
+          bonusCredits     : bonus,
+          referralExtra    : refExtra,
+          referralCodeUsed : referralValid ? referralCode : '',
+          refOwnerEmail    : referralValid ? refOwnerEmail : '',
+          stack_count      : qty,
+          agency_stacked   : qty,
+          installments     : 1
+        },
+        success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url : `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
+      });
+  
+      res.json({ url: session.url });
     } catch (err) {
-        console.error('Stripe error:', err);
-        res.status(500).json({ error: 'stripe_error' });
+      console.error('Stripe error:', err);
+      res.status(500).json({ error: 'stripe_error' });
     }
-});
+  });
+  
+  /* Create either one-time or installment checkout (preferred) */
+  app.post('/api/create-plan-checkout', async (req, res) => {
+    try {
+      const { tier, referralCode, stackCount = 1, installments = 1, promoCode } = req.body || {};
+      if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
+  
+      const now = new Date();
+      let discountPct   = calcDiscount(now);
+      let referralValid = false;
+      let refOwnerEmail = '';
+  
+      if (referralCode && referralCode.toUpperCase() === 'SNAP10') {
+        referralValid = true;
+      } else if (referralCode) {
+        try {
+          const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
+          referralValid = !!r.data.valid;
+          refOwnerEmail = r.data.ownerEmail || '';
+        } catch {}
+      }
+      if (referralValid) discountPct = 50;
+  
+      const qty      = Math.max(1, parseInt(stackCount || 1, 10));
+      const base     = BASE_PRICES[tier] * qty;
+      const total    = +(base * (1 - discountPct / 100)).toFixed(2);
+      const bonus    = calcBonus(tier, now);
+      const refExtra = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
+  
+      if (installments <= 1) {
+        const unitAmount = Math.round(BASE_PRICES[tier] * 100 * (1 - discountPct / 100));
+        const discounts  = [];
+        if (promoCode) discounts.push({ promotion_code: promoCode });
+        const session = await stripeClient.checkout.sessions.create({
+          mode: 'payment',
+          line_items: [{ quantity: qty, price_data: { currency: 'usd', product: PRODUCT_IDS[tier], unit_amount: unitAmount } }],
+          discounts,
+          allow_promotion_codes: true,
+          metadata: {
+            tier,
+            baseCredits: BASE_CREDITS[tier],
+            bonusCredits: bonus,
+            referralExtra: refExtra,
+            referralCodeUsed: referralValid ? referralCode : '',
+            refOwnerEmail: referralValid ? refOwnerEmail : '',
+            stack_count: qty,
+            agency_stacked: qty,
+            installments: 1,
+            plan_total_cents: Math.round(total * 100),
+            per_payment_cents: Math.round(total * 100)
+          },
+          success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url : `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
+        });
+        return res.json({ url: session.url });
+      }
+  
+      const addPct = 0.04 + (0.02 * installments);
+      const gross  = +(total * (1 + addPct)).toFixed(2);
+      const per    = +(gross / installments).toFixed(2);
+  
+      const price = await stripeClient.prices.create({
+        currency: 'usd',
+        unit_amount: Math.round(per * 100),
+        recurring: { interval: 'month' },
+        product_data: { name: `SnapLayer LTD – ${tier} – ${installments} payments` }
+      });
+  
+      const session = await stripeClient.checkout.sessions.create({
+        mode: 'subscription',
+        line_items: [{ price: price.id, quantity: 1 }],
+        allow_promotion_codes: false,
+        metadata: {
+          tier,
+          stack_count: qty,
+          installments,
+          plan_total_cents: Math.round(gross * 100),
+          per_payment_cents: Math.round(per * 100),
+          baseCredits: BASE_CREDITS[tier],
+          bonusCredits: bonus,
+          referralExtra: refExtra,
+          referralCodeUsed: referralValid ? referralCode : '',
+          refOwnerEmail: referralValid ? refOwnerEmail : ''
+        },
+        success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url : `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
+      });
+  
+      res.json({ url: session.url });
+    } catch (err) {
+      console.error('Stripe plan error:', err);
+      res.status(500).json({ error: 'stripe_error' });
+    }
+  });
+
+  
 
 app.listen(4242, () => console.log('✅ Server listening on :4242'));
