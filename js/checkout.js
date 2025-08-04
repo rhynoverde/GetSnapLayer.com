@@ -65,34 +65,53 @@ async function openPlanModal(referral) {
     const data = await r.json();
 
     lastOptions = data;
-    planSummary.textContent = `Plan: ${data.tierLabel} · Stack: ${data.stackCount} · Today’s discount: ${data.discountPct}%`;
-
+    {
+        const base = `Plan: ${data.tierLabel} · Stack: ${data.stackCount} · Today’s discount: ${data.discountPct}%`;
+        if (data.referralValid) {
+          const credits = data.referralExtraTotal || 0;
+          const codeTxt = data.referralCode || '';
+          planSummary.innerHTML = `${base}<br><span class="text-green-300">Referral code ${codeTxt} detected. You and the referrer each get ${credits} credits in total. For payment plans, credits are added per successful payment.</span>`;
+        } else {
+          planSummary.textContent = base;
+        }
+      }
+      
     // Build cards
     const cards = [];
     // One-time
+cards.push({
+    label: 'Pay in full',
+    sub: data.oneTime.note,
+    installments: 1,
+    amount: data.oneTime.totalFormatted,
+    feeNote: ''
+  });
+  // Installments
+  data.installments.forEach(opt => {
+    const pct = Math.round((opt.feePercentEffective || 0) * 100);
+    const feeLine = `Plan fee: +$${(opt.feeDollars || 0).toFixed ? opt.feeDollars.toFixed(2) : (opt.feeDollars || 0)} (≈ ${pct}%)`;
     cards.push({
-      label: 'Pay in full',
-      sub: data.oneTime.note,
-      installments: 1,
-      amount: data.oneTime.totalFormatted
+      label: `${opt.installments} payments`,
+      sub: `${opt.perPaymentFormatted} / month`,
+      installments: opt.installments,
+      amount: opt.totalWithFeeFormatted,
+      feeNote: feeLine,
+      creditsNote: (data.referralValid && opt.approxCreditsPerPayment)
+        ? `≈ ${opt.approxCreditsPerPayment} credits per payment to you and ${opt.approxCreditsPerPayment} to the referrer`
+        : ''
     });
-    // Installments
-    data.installments.forEach(opt => {
-      cards.push({
-        label: `${opt.installments} payments`,
-        sub: `${opt.perPaymentFormatted} / month`,
-        installments: opt.installments,
-        amount: opt.totalWithFeeFormatted
-      });
-    });
+  });
+  
+  planGrid.innerHTML = cards.map(c => `
+    <button data-inst="${c.installments}" class="block text-left bg-blue-800/60 hover:bg-blue-700 rounded-lg p-4 border border-blue-700">
+      <div class="text-lg font-semibold">${c.label}</div>
+      <div class="text-sm text-blue-200">${c.sub}</div>
+      <div class="mt-1 text-sm text-blue-300">Total: ${c.amount}</div>
+      ${c.feeNote ? `<div class="mt-1 text-xs text-blue-300">${c.feeNote}</div>` : ``}
+      ${c.creditsNote ? `<div class="mt-1 text-xs text-green-300">${c.creditsNote}</div>` : ``}
+    </button>
+  `).join('');
 
-    planGrid.innerHTML = cards.map(c => `
-      <button data-inst="${c.installments}" class="block text-left bg-blue-800/60 hover:bg-blue-700 rounded-lg p-4 border border-blue-700">
-        <div class="text-lg font-semibold">${c.label}</div>
-        <div class="text-sm text-blue-200">${c.sub}</div>
-        <div class="mt-1 text-sm text-blue-300">Total: ${c.amount}</div>
-      </button>
-    `).join('');
 
     Array.from(planGrid.querySelectorAll('button[data-inst]')).forEach(btn => {
       btn.addEventListener('click', () => {

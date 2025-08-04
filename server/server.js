@@ -6,7 +6,85 @@ import cors from 'cors';
 import { randomUUID } from 'crypto';
 dotenv.config();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+async function awardReferralCreditsForInvoice(invoice) {
+    try {
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+        const subscriptionId = invoice.subscription || '';
+        if (!subscriptionId) return;
+
+        const sub = await stripeClient.subscriptions.retrieve(subscriptionId);
+        const md  = sub.metadata || {};
+
+        const installments   = Math.max(1, parseInt(md.installments || '1', 10));
+        const stackCount     = Math.max(1, parseInt(md.stack_count  || '1', 10));
+        const perUnitExtra   = Math.max(0, parseInt(md.referralExtra || '0', 10));
+        const refOwnerEmail  = md.refOwnerEmail || '';
+        const referralUsed   = !!(md.referralCodeUsed || '');
+        const purchaserEmail = invoice.customer_email || '';
+
+        // Only applicable to installment plans that actually used a referral
+        if (!referralUsed || !refOwnerEmail || perUnitExtra <= 0 || installments <= 1) return;
+
+        const totalExtra = perUnitExtra * stackCount;
+
+        // Determine which installment index we are on by counting prior "referrer" rows
+        const qCount = `${process.env.NOCO_API_URL}/${T.creditsLedger}?limit=9999&where=(subscription_id,eq,${subscriptionId})~and(type,eq,installment_referral)~and(role,eq,referrer)`;
+        const { data: led } = await axios.get(qCount, headers).catch(() => ({ data: { list: [] } }));
+        const priorReferrerRows = Array.isArray(led.list) ? led.list.length : 0;
+        const thisIndex = priorReferrerRows + 1;
+        if (thisIndex > installments) return;
+
+        // Pro-rata per installment; last payment gets remainder
+        const basePer   = Math.floor(totalExtra / installments);
+        const remainder = totalExtra - basePer * (installments - 1);
+        const awardNow  = (thisIndex === installments) ? remainder : basePer;
+        if (awardNow <= 0) return;
+
+        // Idempotency by invoice_id + role; if either row exists, skip that row
+        const qReferee  = `${process.env.NOCO_API_URL}/${T.creditsLedger}?limit=1&where=(invoice_id,eq,${invoice.id})~and(role,eq,referee)`;
+        const qReferrer = `${process.env.NOCO_API_URL}/${T.creditsLedger}?limit=1&where=(invoice_id,eq,${invoice.id})~and(role,eq,referrer)`;
+        const [r1, r2] = await Promise.all([
+            axios.get(qReferee, headers).catch(() => ({ data: { list: [] } })),
+            axios.get(qReferrer, headers).catch(() => ({ data: { list: [] } }))
+        ]);
+        const hasReferee  = (r1.data?.list || []).length > 0;
+        const hasReferrer = (r2.data?.list || []).length > 0;
+
+        const rows = [];
+        if (!hasReferee) {
+            rows.push({
+                type            : 'installment_referral',
+                subscription_id : subscriptionId,
+                invoice_id      : invoice.id,
+                installment_idx : thisIndex,
+                recipient_email : purchaserEmail,
+                amount          : awardNow,
+                direction       : 'credit',
+                role            : 'referee'
+            });
+        }
+        if (!hasReferrer) {
+            rows.push({
+                type            : 'installment_referral',
+                subscription_id : subscriptionId,
+                invoice_id      : invoice.id,
+                installment_idx : thisIndex,
+                recipient_email : refOwnerEmail,
+                amount          : awardNow,
+                direction       : 'credit',
+                role            : 'referrer'
+            });
+        }
+
+        for (const row of rows) {
+            await axios.post(`${process.env.NOCO_API_URL}/${T.creditsLedger}`, row, headers);
+        }
+    } catch (e) {
+        console.error('awardReferralCreditsForInvoice error', e.response?.data || e.message);
+    }
+}
 
 const APP_BASE = process.env.APP_BASE || 'http://localhost:4242';
 const PRODUCT_IDS = { solo: 'snap_solo_ltd', plus: 'snap_plus_ltd', pro: 'snap_pro_ltd', agency: 'snap_agency_ltd' };
@@ -204,7 +282,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
     const sig = req.headers['stripe-signature'];
     let event;
     try {
-        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_ENDPOINT_SECRET);
+        event = stripeClient.webhooks.constructEvent(req.body, sig, process.env.STRIPE_ENDPOINT_SECRET);
     } catch (err) {
         console.error('Webhook signature error:', err.message);
         return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -230,14 +308,14 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
             const installments = parseInt(s.metadata?.installments || '1', 10);
             if (s.mode === 'subscription' && s.subscription && installments > 1) {
               try {
-                await stripe.subscriptionSchedules.create({
-                  from_subscription: s.subscription,
-                  end_behavior: 'cancel',
-                  phases: [{
-                    items: [{ price: event.data.object.display_items?.[0]?.price?.id || undefined, quantity: 1 }],
-                    iterations: installments
-                  }]
-                });
+                await stripeClient.subscriptionSchedules.create({
+                    from_subscription: s.subscription,
+                    end_behavior: 'cancel',
+                    phases: [{
+                      items: [{ price: event.data.object.display_items?.[0]?.price?.id || undefined, quantity: 1 }],
+                      iterations: installments
+                    }]
+                  });
               } catch (e) {
                 console.error('schedule create error', e.message);
               }
@@ -253,12 +331,20 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
         })();
       
         inflightSessions.set(key, task);
-      }
-      
+    } else if (event.type === 'invoice.paid') {
+        const inv = event.data.object;
+        console.log('💡 Webhook received: invoice.paid', inv.id, 'sub:', inv.subscription || '');
+        try {
+          await awardReferralCreditsForInvoice(inv);
+        } catch (e) {
+          console.error('invoice.paid handler error', e.response?.data || e.message);
+        }
+    }
 
     // Always respond 2xx quickly so Stripe does not retry
     return res.json({ received: true });
 });
+
 
 /* JSON parser AFTER webhook */
 app.use(express.json());
@@ -298,7 +384,7 @@ app.get('/checkout-success', async (req, res) => {
 
     try {
         if (sessionId) {
-            const s = await stripe.checkout.sessions.retrieve(sessionId);
+            const s = await stripeClient.checkout.sessions.retrieve(sessionId);
             email = s.customer_details?.email || '';
             amount = ((s.amount_total || 0) / 100).toFixed(2);
             currency = (s.currency || 'usd').toUpperCase();
@@ -320,74 +406,6 @@ app.get('/checkout-success', async (req, res) => {
         '<a class="btn" href="/">Back to site</a></div></body></html>'
     );
 });
-
-
-const stripeClient = stripe;
-
-/* Generate a one-per-day, one-time code for an owner */
-app.post('/api/referrals/generate', async (req, res) => {
-    const { ownerEmail } = req.body;
-    if (!ownerEmail) return res.status(400).json({ error: 'ownerEmail required' });
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-
-    try {
-        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
-
-        // ensure the email has at least one purchase before issuing codes
-        const { data: pcheck } = await axios.get(
-            `${process.env.NOCO_API_URL}/${T.purchasers}?limit=1&where=(email,eq,${ownerEmail})`,
-            headers
-        );
-        if (!Array.isArray(pcheck.list) || !pcheck.list.length) {
-            return res.status(403).json({ error: 'not_a_purchaser' });
-        }
-
-        // get latest code for this owner; if it's from today, return it
-        const { data: existing } = await axios.get(
-            `${process.env.NOCO_API_URL}/${T.codes}?limit=1&sort=-issued_date&where=(owner_email,eq,${ownerEmail})`,
-            headers
-        );
-        const last = existing.list?.[0];
-        if (last && String(last.issued_date || '').slice(0, 10) === today) {
-            return res.json({ code: last.code });
-        }
-
-        // create a new code
-        const token = Math.random().toString(36).slice(2, 8).toUpperCase();
-        const code = `SL-${token}`;       
-        await axios.post(`${process.env.NOCO_API_URL}/${T.codes}`, {
-            code, owner_email: ownerEmail, issued_date: today, status: 'issued'
-        }, headers);
-
-        // bump owner totals (upsert-ish)
-        const { data: odata } = await axios.get(
-            `${process.env.NOCO_API_URL}/${T.owners}?where=(owner_email,eq,${ownerEmail})`,
-            headers
-        );
-        const owner = odata.list?.[0];
-        if (owner) {
-            await axios.patch(`${process.env.NOCO_API_URL}/${T.owners}/${owner.Id || owner.id}`, {
-                total_codes_issued: (owner.total_codes_issued || 0) + 1,
-                updated_ts: new Date().toISOString()
-            }, headers);
-        } else {
-            await axios.post(`${process.env.NOCO_API_URL}/${T.owners}`, {
-                owner_email: ownerEmail,
-                total_codes_issued: 1,
-                total_redemptions: 0,
-                credits_earned: 0,
-                created_ts: new Date().toISOString(),
-                updated_ts: new Date().toISOString()
-            }, headers);
-        }
-
-        res.json({ code });
-    } catch (e) {
-        console.error('generate error', e.response?.data || e.message);
-        res.status(500).json({ error: 'server_error' });
-    }
-});
-
 
 /* Validate a referral code is unused & return owner email */
 app.post('/api/check-code', async (req, res) => {
@@ -558,20 +576,27 @@ app.post('/api/pricing-options', async (req, res) => {
       const oneTime = {
         total,
         totalFormatted: `$${total.toFixed(2)}`,
-        note: 'Pay once, own for life'
+        note: 'Pay once, own for life',
+        feePercent: 0,
+        feeDollars: 0
       };
   
       const installmentsList = [];
       for (let n = 2; n <= 12; n++) {
-        const addPct = 0.04 + (0.02 * n);
-        const gross  = +(total * (1 + addPct)).toFixed(2);
-        const per    = +(gross / n).toFixed(2);
+        const percentFeeDollars = +(total * (n / 100)).toFixed(2);
+        const minDollarFee      = 5 * (n - 1);
+        const feeDollars        = Math.max(percentFeeDollars, minDollarFee);
+        const gross             = +(total + feeDollars).toFixed(2);
+        const per               = +(gross / n).toFixed(2);
   
         const allowSpecial2 = (total > 50 && total <= 100 && n === 2);
         if (per >= 40 || allowSpecial2) {
           const perInstallmentCredits = referralValid ? Math.floor(referralExtraTotal / n) : 0;
+          const feePercentEffective   = +(feeDollars / total).toFixed(4); // 0.1234 = 12.34%
           installmentsList.push({
             installments: n,
+            feeDollars,
+            feePercentEffective,
             perPayment: per,
             totalWithFee: gross,
             perPaymentFormatted: `$${per.toFixed(2)}`,
@@ -598,6 +623,8 @@ app.post('/api/pricing-options', async (req, res) => {
       res.status(500).json({ error: 'server_error', detail: e.message });
     }
   });
+
+
   
   /* Create Checkout Session (dynamic price; optional referral coupon; optional agency stack) */
   app.post('/api/create-checkout-session', async (req, res) => {
@@ -716,9 +743,12 @@ app.post('/api/pricing-options', async (req, res) => {
         return res.json({ url: session.url });
       }
   
-      const addPct = 0.04 + (0.02 * installments);
-      const gross  = +(total * (1 + addPct)).toFixed(2);
-      const per    = +(gross / installments).toFixed(2);
+      const percentFeeDollars = +(total * (installments / 100)).toFixed(2);
+      const minDollarFee      = 5 * (installments - 1);
+      const feeDollars        = Math.max(percentFeeDollars, minDollarFee);
+      const gross             = +(total + feeDollars).toFixed(2);
+      const per               = +(gross / installments).toFixed(2);
+
   
       const price = await stripeClient.prices.create({
         currency: 'usd',
@@ -731,18 +761,21 @@ app.post('/api/pricing-options', async (req, res) => {
         mode: 'subscription',
         line_items: [{ price: price.id, quantity: 1 }],
         allow_promotion_codes: false,
-        metadata: {
-          tier,
-          stack_count: qty,
-          installments,
-          plan_total_cents: Math.round(gross * 100),
-          per_payment_cents: Math.round(per * 100),
-          baseCredits: BASE_CREDITS[tier],
-          bonusCredits: bonus,
-          referralExtra: refExtra,
-          referralCodeUsed: referralValid ? referralCode : '',
-          refOwnerEmail: referralValid ? refOwnerEmail : ''
+        subscription_data: {
+          metadata: {
+            tier,
+            stack_count: qty,
+            installments,
+            plan_total_cents: Math.round(gross * 100),
+            per_payment_cents: Math.round(per * 100),
+            baseCredits: BASE_CREDITS[tier],
+            bonusCredits: bonus,
+            referralExtra: refExtra,
+            referralCodeUsed: referralValid ? referralCode : '',
+            refOwnerEmail: referralValid ? refOwnerEmail : ''
+          }
         },
+
         success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url : `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
       });
