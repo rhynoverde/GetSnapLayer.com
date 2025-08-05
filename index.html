@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SnapLayer - PreLaunch Sale!</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>window.SNAP_API_BASE = window.SNAP_API_BASE || 'http://localhost:4242';</script>
   <style>
     .discount-pill {
       background-color: #5b21b6;
@@ -17,12 +19,14 @@
       color: #ffffff;
       box-shadow: 0 10px 28px rgba(91, 33, 182, 0.45), 0 4px 10px rgba(0, 0, 0, 0.35);
     }
+
     .countdown-label {
       font-style: italic;
       color: #fca5a5;
       letter-spacing: 0.04em;
       font-size: 1.25rem;
     }
+
     .timer-box {
       background: #0a0a0a;
       border: 3px solid #ef4444;
@@ -32,6 +36,7 @@
       display: inline-block;
       min-width: 360px;
     }
+
     .timer-display {
       font-family: "Courier New", monospace;
       font-size: 2.6rem;
@@ -40,11 +45,12 @@
       text-shadow: 0 0 8px rgba(255, 45, 45, 0.9), 0 0 16px rgba(255, 45, 45, 0.55);
       text-align: center;
     }
+
     .tomorrow-line {
       color: #cbd5e1;
       font-size: 1.15rem;
     }
-  
+
     /* Header center line + timers */
     .header-timer {
       font-family: "Courier New", monospace;
@@ -52,85 +58,366 @@
       font-weight: 700;
       color: #f87171;
     }
-  
+
     /* Logo states */
     #snaplayer-logo {
-  height: 48px;
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-radius 0.25s ease;
-  }
-  #snaplayer-logo.logo-large {
-    transform: scale(3) translateY(12px);
-    border-radius: 0.85rem;
-    box-shadow: 0 20px 44px rgba(0,0,0,0.35);
-  }
-  #snaplayer-logo.logo-small {
-    transform: scale(1) translateY(0);
-    border-radius: 0.375rem;
-    box-shadow: none;
-  }
-
-  
-    /* Timer effects */
-@keyframes pulseHour {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
-}
-.pulse-hour { animation: pulseHour 1.2s infinite; }
-
-@keyframes shakeTen {
-  0%,100% { transform: translateX(0); }
-  20% { transform: translateX(-2px); }
-  40% { transform: translateX(2px); }
-  60% { transform: translateX(-2px); }
-  80% { transform: translateX(2px); }
-}
-.shake-ten { animation: shakeTen 0.5s infinite; }
-
-@keyframes shakeFinal {
-  0%,100% { transform: translateX(0) rotate(0deg); }
-  10% { transform: translateX(-4px) rotate(-1deg); }
-  20% { transform: translateX(4px) rotate(1deg); }
-  30% { transform: translateX(-5px) rotate(-2deg); }
-  40% { transform: translateX(5px) rotate(2deg); }
-  50% { transform: translateX(-6px) rotate(-2deg); }
-  60% { transform: translateX(6px) rotate(2deg); }
-  70% { transform: translateX(-7px) rotate(3deg); }
-  80% { transform: translateX(7px) rotate(-3deg); }
-  90% { transform: translateX(-8px) rotate(3deg); }
-}
-.shake-final { animation: shakeFinal 0.45s infinite; }
-
-  
-    @keyframes shakeFinal {
-      0%,100% { transform: translateX(0) rotate(0deg); }
-      10% { transform: translateX(-4px) rotate(-1deg); }
-      20% { transform: translateX(4px) rotate(1deg); }
-      30% { transform: translateX(-5px) rotate(-2deg); }
-      40% { transform: translateX(5px) rotate(2deg); }
-      50% { transform: translateX(-6px) rotate(-2deg); }
-      60% { transform: translateX(6px) rotate(2deg); }
-      70% { transform: translateX(-7px) rotate(-3deg); }
-      80% { transform: translateX(7px) rotate(3deg); }
-      90% { transform: translateX(-8px) rotate(-3deg); }
+      height: 48px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-radius 0.25s ease;
     }
-    .shake-final { animation: shakeFinal 0.45s infinite; }
-  
+
+    #snaplayer-logo.logo-large {
+      transform: scale(3) translateY(12px);
+      border-radius: 0.85rem;
+      box-shadow: 0 20px 44px rgba(0, 0, 0, 0.35);
+    }
+
+    #snaplayer-logo.logo-small {
+      transform: scale(1) translateY(0);
+      border-radius: 0.375rem;
+      box-shadow: none;
+    }
+
+
+    /* Timer effects */
+    @keyframes pulseHour {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.06);
+      }
+    }
+
+    .pulse-hour {
+      animation: pulseHour 1.2s infinite;
+    }
+
+    @keyframes shakeTen {
+
+      0%,
+      100% {
+        transform: translateX(0);
+      }
+
+      20% {
+        transform: translateX(-2px);
+      }
+
+      40% {
+        transform: translateX(2px);
+      }
+
+      60% {
+        transform: translateX(-2px);
+      }
+
+      80% {
+        transform: translateX(2px);
+      }
+    }
+
+    .shake-ten {
+      animation: shakeTen 0.5s infinite;
+    }
+
+    @keyframes shakeFinal {
+
+      0%,
+      100% {
+        transform: translateX(0) rotate(0deg);
+      }
+
+      10% {
+        transform: translateX(-4px) rotate(-1deg);
+      }
+
+      20% {
+        transform: translateX(4px) rotate(1deg);
+      }
+
+      30% {
+        transform: translateX(-5px) rotate(-2deg);
+      }
+
+      40% {
+        transform: translateX(5px) rotate(2deg);
+      }
+
+      50% {
+        transform: translateX(-6px) rotate(-2deg);
+      }
+
+      60% {
+        transform: translateX(6px) rotate(2deg);
+      }
+
+      70% {
+        transform: translateX(-7px) rotate(3deg);
+      }
+
+      80% {
+        transform: translateX(7px) rotate(-3deg);
+      }
+
+      90% {
+        transform: translateX(-8px) rotate(3deg);
+      }
+    }
+
+    .shake-final {
+      animation: shakeFinal 0.45s infinite;
+    }
+
+
+    @keyframes shakeFinal {
+
+      0%,
+      100% {
+        transform: translateX(0) rotate(0deg);
+      }
+
+      10% {
+        transform: translateX(-4px) rotate(-1deg);
+      }
+
+      20% {
+        transform: translateX(4px) rotate(1deg);
+      }
+
+      30% {
+        transform: translateX(-5px) rotate(-2deg);
+      }
+
+      40% {
+        transform: translateX(5px) rotate(2deg);
+      }
+
+      50% {
+        transform: translateX(-6px) rotate(-2deg);
+      }
+
+      60% {
+        transform: translateX(6px) rotate(2deg);
+      }
+
+      70% {
+        transform: translateX(-7px) rotate(-3deg);
+      }
+
+      80% {
+        transform: translateX(7px) rotate(3deg);
+      }
+
+      90% {
+        transform: translateX(-8px) rotate(-3deg);
+      }
+    }
+
+    .shake-final {
+      animation: shakeFinal 0.45s infinite;
+    }
+
     /* Explosion overlay */
-    #explosion-overlay { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 60; }
+    #explosion-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 60;
+    }
+
     #explosion-overlay.explode {
       animation: explodeFlash 1100ms ease-out forwards;
-      background: radial-gradient(circle at center, rgba(255,255,255,0.95) 0%, rgba(255,0,0,0.35) 30%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0) 100%);
+      background: radial-gradient(circle at center, rgba(255, 255, 255, 0.95) 0%, rgba(255, 0, 0, 0.35) 30%, rgba(0, 0, 0, 0.6) 60%, rgba(0, 0, 0, 0) 100%);
     }
+
     @keyframes explodeFlash {
-      0% { opacity: 0; }
-      10% { opacity: 1; }
-      50% { opacity: 0.6; }
-      100% { opacity: 0; }
+      0% {
+        opacity: 0;
+      }
+
+      10% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.6;
+      }
+
+      100% {
+        opacity: 0;
+      }
     }
-  </style>  
-  
+  </style>
+
+  <style>
+    #site-banner {
+      position: sticky;
+      top: 0;
+      z-index: 45;
+    }
+
+    .banner-strip {
+      position: relative;
+      border-bottom: 1px solid rgba(255, 255, 255, .15);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, .25);
+    }
+
+    .banner-inner {
+      padding: .6rem 1rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      text-align: center;
+    }
+
+    .banner-info {
+      background: linear-gradient(90deg, #1e3a8a, #312e81);
+    }
+
+    .banner-warning {
+      background: linear-gradient(90deg, #b45309, #92400e);
+    }
+
+    .banner-success {
+      background: linear-gradient(90deg, #065f46, #065f46);
+    }
+
+    .banner-danger {
+      background: linear-gradient(90deg, #7f1d1d, #991b1b);
+    }
+
+    .banner-static {}
+
+    .banner-marquee {
+      overflow: hidden;
+    }
+
+    .banner-marquee .track {
+      display: inline-block;
+      white-space: nowrap;
+      padding-left: 100%;
+      animation: banner-marquee var(--duration, 18s) linear infinite;
+    }
+
+    @keyframes banner-marquee {
+      from {
+        transform: translateX(0);
+      }
+
+      to {
+        transform: translateX(-50%);
+      }
+    }
+
+    .banner-close {
+      position: absolute;
+      right: .5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(0, 0, 0, .25);
+      border: 1px solid rgba(255, 255, 255, .15);
+      border-radius: .375rem;
+      padding: .1rem .45rem;
+      line-height: 1;
+    }
+
+    /* ───────── Banner styles ───────── */
+    #site-banner {
+      position: sticky;
+      top: 0;
+      z-index: 60;
+    }
+
+    .banner-strip {
+      position: relative;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .banner-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .75rem;
+      padding: .5rem 1rem;
+      font-weight: 600;
+      letter-spacing: .01em;
+    }
+
+    .banner-close {
+      position: absolute;
+      right: .5rem;
+      top: .5rem;
+      border: 0;
+      background: transparent;
+      color: #fff;
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      opacity: .7;
+    }
+
+    .banner-close:hover {
+      opacity: 1;
+    }
+
+    /* themes to match site */
+    .banner-info {
+      background: linear-gradient(180deg, rgba(23, 37, 84, .98), rgba(2, 6, 23, .98));
+      color: #dbeafe;
+    }
+
+    .banner-warn {
+      background: linear-gradient(180deg, rgba(120, 53, 15, .98), rgba(2, 6, 23, .98));
+      color: #ffedd5;
+    }
+
+    .banner-alert {
+      background: linear-gradient(180deg, rgba(127, 29, 29, .98), rgba(2, 6, 23, .98));
+      color: #fee2e2;
+    }
+
+    .banner-success {
+      background: linear-gradient(180deg, rgba(6, 78, 59, .98), rgba(2, 6, 23, .98));
+      color: #d1fae5;
+    }
+
+    .banner-static {
+      white-space: nowrap;
+    }
+
+    .banner-marquee {
+      overflow: hidden;
+    }
+
+    .banner-marquee .track {
+      display: inline-block;
+      padding-left: 100%;
+      animation: banner-scroll var(--duration, 18s) linear infinite;
+    }
+
+    @keyframes banner-scroll {
+      0% {
+        transform: translateX(0);
+      }
+
+      100% {
+        transform: translateX(-100%);
+      }
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
 </head>
+</head>
+
 <body class="bg-blue-950 text-white font-sans">
+  <div id="site-banner" class="hidden"></div>
+
   <!-- Navigation & Logo -->
   <header class="bg-blue-950 border-b border-blue-800 sticky top-0 z-50">
     <div class="container mx-auto flex items-center py-4 px-4">
@@ -138,16 +425,16 @@
         <img src="images/SnapLayer-Logo-whiteBlue.png" alt="SnapLayer logo" id="snaplayer-logo" class="logo-large">
         <span class="font-bold text-xl">SnapLayer</span>
       </div>
-  
+
       <div class="flex-1 hidden md:flex justify-center">
         <div class="text-sm md:text-base flex items-center gap-2">
           <span id="header-discount-text" class="whitespace-nowrap"></span>
           <span id="header-timer" class="header-timer"></span>
         </div>
       </div>
-  
+
       <button id="menu-toggle" class="md:hidden ml-auto p-2 border border-blue-700 rounded">☰</button>
-  
+
       <nav class="hidden md:flex space-x-6 text-sm">
         <a href="index.html" class="hover:text-pink-400">Home</a>
         <a href="gallery.html" class="hover:text-pink-400">Gallery</a>
@@ -157,13 +444,13 @@
         <a href="faq.html" class="hover:text-pink-400">FAQ</a>
       </nav>
     </div>
-  
+
     <div class="md:hidden px-4 pb-2">
       <div class="flex justify-center">
         <span id="header-timer-mobile" class="header-timer"></span>
       </div>
     </div>
-  
+
     <div id="mobile-nav" class="md:hidden hidden border-t border-blue-800 px-4 pb-3">
       <div class="flex flex-col space-y-2 pt-2">
         <a href="index.html" class="hover:text-pink-400">Home</a>
@@ -175,13 +462,13 @@
       </div>
     </div>
   </header>
-  
 
   <!-- Hero Section -->
   <section id="hero" class="bg-blue-900 pt-36 pb-20 text-center px-4">
     <h1 class="text-5xl font-extrabold mb-5">Unlock Your Creativity with SnapLayer</h1>
-    <p class="text-2xl max-w-3xl mx-auto mb-8">Generate personalized images from dynamic templates, automate your content creation and supercharge your referrals.</p>
-  
+    <p class="text-2xl max-w-3xl mx-auto mb-8">Generate personalized images from dynamic templates, automate your
+      content creation and supercharge your referrals.</p>
+
     <div class="flex flex-col items-center space-y-4 mb-8">
       <span id="todays-discount" class="discount-pill"></span>
       <p class="countdown-label">Warning, this discount self destructs in:</p>
@@ -190,10 +477,12 @@
       </div>
       <p id="tomorrow-line" class="tomorrow-line"></p>
     </div>
-  
-    <a href="#plans" class="bg-pink-500 hover:bg-pink-600 text-white px-10 py-5 rounded-full text-2xl font-semibold transition-colors">Get SnapLayer PreLaunch Discount and Extra Limits</a>
+
+    <a href="#plans"
+      class="bg-pink-500 hover:bg-pink-600 text-white px-10 py-5 rounded-full text-2xl font-semibold transition-colors">Get
+      SnapLayer PreLaunch Discount and Extra Limits</a>
   </section>
-  
+
 
   <!-- Video / Sizzle Section -->
   <section class="py-12 px-4">
@@ -202,9 +491,10 @@
       <div class="max-w-4xl mx-auto aspect-w-16 aspect-h-9 mb-4">
         <!-- Replace this iframe src with your actual video URL -->
         <iframe class="w-full h-64 md:h-96
-         rounded-lg shadow-lg" src="https://www.youtube.com/embed/pdgUEnKbxhk" title="SnapLayer Preview" frameborder="0" allowfullscreen></iframe>
+         rounded-lg shadow-lg" src="https://www.youtube.com/embed/pdgUEnKbxhk" title="SnapLayer Preview"
+          frameborder="0" allowfullscreen></iframe>
       </div>
- 
+
     </div>
   </section>
 
@@ -214,7 +504,7 @@
   <section class="py-16 px-4" id="features">
     <div class="container mx-auto">
       <h2 class="text-3xl font-bold text-center mb-12">Why SnapLayer?</h2>
-  
+
       <div class="max-w-5xl mx-auto space-y-10">
         <div data-reveal class="opacity-0 translate-y-4 transition-all duration-700">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
@@ -224,24 +514,27 @@
             <div class="md:col-span-2 relative pl-6">
               <span class="absolute left-0 top-3 bottom-3 w-1 bg-blue-600 rounded-full"></span>
               <h3 class="text-2xl font-semibold mb-2">API Image Generation</h3>
-              <p>Create images via simple API calls. Integrate SnapLayer into your apps and automate content creation at scale.</p>
+              <p>Create images via simple API calls. Integrate SnapLayer into your apps and automate content creation at
+                scale.</p>
             </div>
           </div>
         </div>
-  
+
         <div data-reveal class="opacity-0 translate-y-4 transition-all duration-700">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
             <div class="md:col-span-1">
-              <img src="images/guided-image-acquisition-001.jpg" alt="Guided image acquisition" class="w-full rounded-xl shadow-2xl">
+              <img src="images/guided-image-acquisition-001.jpg" alt="Guided image acquisition"
+                class="w-full rounded-xl shadow-2xl">
             </div>
             <div class="md:col-span-2 relative pl-6">
               <span class="absolute left-0 top-3 bottom-3 w-1 bg-blue-600 rounded-full"></span>
               <h3 class="text-2xl font-semibold mb-2">Guided Image Acquisition</h3>
-              <p>Search multiple sources (Google, Yelp, Shopify, etc.) to pull logos and graphics fast with our guided flow.</p>
+              <p>Search multiple sources (Google, Yelp, Shopify, etc.) to pull logos and graphics fast with our guided
+                flow.</p>
             </div>
           </div>
         </div>
-  
+
         <div data-reveal class="opacity-0 translate-y-4 transition-all duration-700">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
             <div class="md:col-span-1">
@@ -254,7 +547,7 @@
             </div>
           </div>
         </div>
-  
+
         <div data-reveal class="opacity-0 translate-y-4 transition-all duration-700">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
             <div class="md:col-span-1">
@@ -267,7 +560,7 @@
             </div>
           </div>
         </div>
-  
+
         <div data-reveal class="opacity-0 translate-y-4 transition-all duration-700">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
             <div class="md:col-span-1">
@@ -276,7 +569,8 @@
             <div class="md:col-span-2 relative pl-6">
               <span class="absolute left-0 top-3 bottom-3 w-1 bg-blue-600 rounded-full"></span>
               <h3 class="text-2xl font-semibold mb-2">SnapSheet</h3>
-              <p>Upload a CSV and generate images in bulk. Perfect for campaigns with dozens or hundreds of variations.</p>
+              <p>Upload a CSV and generate images in bulk. Perfect for campaigns with dozens or hundreds of variations.
+              </p>
             </div>
           </div>
         </div>
@@ -285,32 +579,41 @@
   </section>
 
   <!-- Why Buy Now Section -->
-<section class="bg-blue-900 py-16 px-4">
-  <div class="container mx-auto">
-    <h2 class="text-4xl md:text-5xl font-extrabold text-center mb-8">Why Buy Now?</h2>
+  <section class="bg-blue-900 py-16 px-4">
+    <div class="container mx-auto">
+      <h2 class="text-4xl md:text-5xl font-extrabold text-center mb-8">Why Buy Now?</h2>
 
-    <div class="flex justify-center mb-6">
-      <button id="style-toggle" class="bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-md text-sm">Show Style 002</button>
+      <div class="flex justify-center mb-6">
+        <button id="style-toggle" class="bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-md text-sm">Show Style
+          002</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+        <div class="bg-blue-800/60 rounded-xl p-3 shadow-lg"><img data-key="built-for-speed" alt="Built for speed"
+            class="w-full rounded-lg shadow-md"></div>
+        <div class="bg-blue-800/60 rounded-xl p-3 shadow-lg"><img data-key="reuse-or-resell" alt="Resell or reuse"
+            class="w-full rounded-lg shadow-md"></div>
+        <div class="bg-blue-800/60 rounded-xl p-3 shadow-lg"><img data-key="stack-accounts" alt="Stack accounts"
+            class="w-full rounded-lg shadow-md"></div>
+        <div class="bg-blue-800/60 rounded-xl p-3 shadow-lg"><img data-key="shape-the-product" alt="Shape the product"
+            class="w-full rounded-lg shadow-md"></div>
+      </div>
+
+      <div class="max-w-3xl mx-auto space-y-4 text-left mt-8">
+        <p>🔥 <strong>Early means extra:</strong> Bigger discounts, more starting credits, and boosted referral rewards
+          the earlier you buy.</p>
+        <p>🎯 <strong>Built for speed:</strong> Generate hundreds of custom images in minutes without design tools.</p>
+        <p>💰 <strong>Resell or reuse:</strong> Commercial rights included. Sell to clients or reuse templates
+          endlessly.</p>
+        <p>🌐 <strong>Stack accounts:</strong> Want more limits? Stack as many LTDs as you like. Perfect for agencies.
+        </p>
+        <p>🧩 <strong>Shape the product:</strong> Early adopters help prioritize the roadmap and earn rewards for
+          feedback.</p>
+      </div>
     </div>
+  </section>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-      <div class="bg-blue-800/60 rounded-xl p-3 shadow-lg"><img data-key="built-for-speed" alt="Built for speed" class="w-full rounded-lg shadow-md"></div>
-      <div class="bg-blue-800/60 rounded-xl p-3 shadow-lg"><img data-key="reuse-or-resell" alt="Resell or reuse" class="w-full rounded-lg shadow-md"></div>
-      <div class="bg-blue-800/60 rounded-xl p-3 shadow-lg"><img data-key="stack-accounts" alt="Stack accounts" class="w-full rounded-lg shadow-md"></div>
-      <div class="bg-blue-800/60 rounded-xl p-3 shadow-lg"><img data-key="shape-the-product" alt="Shape the product" class="w-full rounded-lg shadow-md"></div>
-    </div>
 
-    <div class="max-w-3xl mx-auto space-y-4 text-left mt-8">
-      <p>🔥 <strong>Early means extra:</strong> Bigger discounts, more starting credits, and boosted referral rewards the earlier you buy.</p>
-      <p>🎯 <strong>Built for speed:</strong> Generate hundreds of custom images in minutes without design tools.</p>
-      <p>💰 <strong>Resell or reuse:</strong> Commercial rights included. Sell to clients or reuse templates endlessly.</p>
-      <p>🌐 <strong>Stack accounts:</strong> Want more limits? Stack as many LTDs as you like. Perfect for agencies.</p>
-      <p>🧩 <strong>Shape the product:</strong> Early adopters help prioritize the roadmap and earn rewards for feedback.</p>
-    </div>
-  </div>
-</section>
-
-  
 
   <!-- Pricing Plans Section -->
   <section id="plans" class="py-16 px-4">
@@ -329,12 +632,14 @@
             <li>Up to 3 templates</li>
             <li>5 text + 3 image fields per template</li>
             <li>Up to 50 rows per SnapSheet</li>
-            <li><span class="plan-base" data-tier="solo">250</span> images/month + <span class="plan-bonus" data-tier="solo"></span> bonus credits now</li>
-            <li class="text-xs text-blue-300">Bonus starts at 200 and drops 4/day (2%) until it reaches 0 by day 50.</li>
+            <li><span class="plan-base" data-tier="solo">250</span> images/month + <span class="plan-bonus"
+                data-tier="solo"></span> bonus credits now</li>
+            <li class="text-xs text-blue-300">Bonus starts at 200 and drops 4/day (2%) until it reaches 0 by day 50.
+            </li>
             <li>SnapLinks</li>
             <li>No API / SnapPages / PSD import</li>
             <li>1 GB storage</li>
-          </ul>     
+          </ul>
           <a href="#" class="mt-6 bg-pink-500 hover:bg-pink-600 text-white py-2 px-4 rounded-md text-center">Buy LTD</a>
         </div>
         <!-- Plus Plan -->
@@ -349,7 +654,8 @@
             <li>10 templates</li>
             <li>10 text + 5 image fields per template</li>
             <li>Up to 250 rows per SnapSheet</li>
-            <li><span class="plan-base" data-tier="plus">1000</span> images/month + <span class="plan-bonus" data-tier="plus"></span> bonus credits now</li>
+            <li><span class="plan-base" data-tier="plus">1000</span> images/month + <span class="plan-bonus"
+                data-tier="plus"></span> bonus credits now</li>
             <li>10 SnapPages</li>
             <li>PSD import</li>
             <li>No subaccounts / white‑label / API</li>
@@ -369,7 +675,8 @@
             <li>Unlimited templates</li>
             <li>15 text + 10 image fields per template</li>
             <li>Up to 1,000 rows per SnapSheet</li>
-            <li><span class="plan-base" data-tier="pro">5000</span> images/month + <span class="plan-bonus" data-tier="pro"></span> bonus credits now</li>
+            <li><span class="plan-base" data-tier="pro">5000</span> images/month + <span class="plan-bonus"
+                data-tier="pro"></span> bonus credits now</li>
             <li>Unlimited SnapPages</li>
             <li>10 subaccounts</li>
             <li>White‑label + API access</li>
@@ -389,7 +696,8 @@
             <li>Unlimited templates</li>
             <li>Unlimited text + image fields (within capacity)</li>
             <li>Up to 1,000 rows per SnapSheet</li>
-            <li><span class="plan-base" data-tier="agency">10000</span> images/month + <span class="plan-bonus" data-tier="agency"></span> bonus credits now</li>
+            <li><span class="plan-base" data-tier="agency">10000</span> images/month + <span class="plan-bonus"
+                data-tier="agency"></span> bonus credits now</li>
             <li>Unlimited SnapPages</li>
             <li>Unlimited subaccounts</li>
             <li>White‑label + API access + Team collaboration</li>
@@ -408,7 +716,8 @@
       <ul class="max-w-2xl mx-auto space-y-4">
         <li><span class="font-bold">Early August:</span> Beta dashboard + editor opens</li>
         <li><span class="font-bold">Launch Day:</span> SnapPages, SnapSheet, SnapLinks</li>
-        <li><span class="font-bold">After Launch:</span> PSD import, Google Sheets, Zapier/Make/Pabbly integrations, full API</li>
+        <li><span class="font-bold">After Launch:</span> PSD import, Google Sheets, Zapier/Make/Pabbly integrations,
+          full API</li>
         <li><span class="font-bold">Voting:</span> Vote on features and prioritization on our Roadmap page</li>
       </ul>
     </div>
@@ -418,35 +727,40 @@
   <section class="py-16 px-4">
     <div class="container mx-auto">
       <h2 class="text-3xl font-bold text-center mb-4">Earn More with Referrals</h2>
-      <p class="text-center max-w-2xl mx-auto mb-4">Invite your friends and colleagues to SnapLayer. When they purchase, you both get an extra 10% of your plan limits. Your code doesn’t give a discount — it gives more power. Share your referral code after checkout or come back later to redeem one.</p>
+      <p class="text-center max-w-2xl mx-auto mb-4">Invite your friends and colleagues to SnapLayer. When they purchase,
+        you both get an extra 10% of your plan limits. Your code doesn’t give a discount — it gives more power. Share
+        your referral code after checkout or come back later to redeem one.</p>
     </div>
   </section>
 
   <!-- FAQ Teaser -->
-<section class="bg-blue-900 py-16 px-4">
-  <div class="container mx-auto">
-    <h2 class="text-3xl font-bold text-center mb-6">Frequently Asked Questions</h2>
-    <div class="max-w-3xl mx-auto space-y-3">
-      <details class="bg-blue-800/50 rounded-md p-4">
-        <summary class="cursor-pointer font-semibold">What’s the risk in buying now?</summary>
-        <div class="mt-2 text-sm text-slate-200">You’ll have 30 days AFTER launch to request a refund if SnapLayer isn’t right for you. Zero pressure, zero risk.</div>
-      </details>
-      <details class="bg-blue-800/50 rounded-md p-4">
-        <summary class="cursor-pointer font-semibold">Can I sell or transfer my account?</summary>
-        <div class="mt-2 text-sm text-slate-200">Yes! You can change your email and resell or transfer your license at any time. Buy as many accounts as you like.</div>
-      </details>
-      <details class="bg-blue-800/50 rounded-md p-4">
-        <summary class="cursor-pointer font-semibold">Do unused credits roll over?</summary>
-        <div class="mt-2 text-sm text-slate-200">Prelaunch buyers get rollover up to 5× their monthly limit.</div>
-      </details>
-      <details class="bg-blue-800/50 rounded-md p-4">
-        <summary class="cursor-pointer font-semibold">Will you support video or GIF generation?</summary>
-        <div class="mt-2 text-sm text-slate-200">SnapLayer is focused on static images. Video tools may come later via EmbrFyr.</div>
-      </details>
+  <section class="bg-blue-900 py-16 px-4">
+    <div class="container mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-6">Frequently Asked Questions</h2>
+      <div class="max-w-3xl mx-auto space-y-3">
+        <details class="bg-blue-800/50 rounded-md p-4">
+          <summary class="cursor-pointer font-semibold">What’s the risk in buying now?</summary>
+          <div class="mt-2 text-sm text-slate-200">You’ll have 30 days AFTER launch to request a refund if SnapLayer
+            isn’t right for you. Zero pressure, zero risk.</div>
+        </details>
+        <details class="bg-blue-800/50 rounded-md p-4">
+          <summary class="cursor-pointer font-semibold">Can I sell or transfer my account?</summary>
+          <div class="mt-2 text-sm text-slate-200">Yes! You can change your email and resell or transfer your license at
+            any time. Buy as many accounts as you like.</div>
+        </details>
+        <details class="bg-blue-800/50 rounded-md p-4">
+          <summary class="cursor-pointer font-semibold">Do unused credits roll over?</summary>
+          <div class="mt-2 text-sm text-slate-200">Prelaunch buyers get rollover up to 5× their monthly limit.</div>
+        </details>
+        <details class="bg-blue-800/50 rounded-md p-4">
+          <summary class="cursor-pointer font-semibold">Will you support video or GIF generation?</summary>
+          <div class="mt-2 text-sm text-slate-200">SnapLayer is focused on static images. Video tools may come later via
+            EmbrFyr.</div>
+        </details>
+      </div>
+      <p class="text-center mt-6"><a href="faq.html" class="underline text-pink-400">View all FAQs</a></p>
     </div>
-    <p class="text-center mt-6"><a href="faq.html" class="underline text-pink-400">View all FAQs</a></p>
-  </div>
-</section>
+  </section>
 
   <!-- Footer -->
   <footer class="bg-blue-950 py-8 px-4 border-t border-blue-800">
@@ -456,121 +770,138 @@
         <input type="email" placeholder="Enter your email" class="px-4 py-2 rounded-md w-64 text-black" required>
         <button type="submit" class="bg-pink-500 hover:bg-pink-600 px-6 py-2 rounded-md">Subscribe</button>
       </form>
-      <p class="text-xs text-gray-400 mt-4">© 2025 SnapLayer by EmbrFyr — <a href="https://embrfyr.com" target="_blank" class="underline">EmbrFyr.com</a>. All rights reserved.</p>
+      <p class="text-xs text-gray-400 mt-4">© 2025 SnapLayer by EmbrFyr — <a href="https://embrfyr.com" target="_blank"
+          class="underline">EmbrFyr.com</a>. All rights reserved.</p>
     </div>
   </footer>
 
-<!-- Sticky mini timer -->
-<div id="mini-timer" class="fixed bottom-6 right-6 hidden z-50">
-  <div class="timer-box">
-    <div id="mini-timer-display" class="timer-display"></div>
-  </div>
-</div>
-
-<!-- Dev controls (temporary) -->
-<div id="dev-panel" class="fixed bottom-6 left-6 z-50 bg-blue-900/80 backdrop-blur-sm border border-blue-700 rounded-lg p-3 flex flex-wrap gap-2">
-  <button id="dev-hour" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last hour timer</button>
-  <button id="dev-ten" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last 10 minutes timer</button>
-  <button id="dev-tensec" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last 10 seconds timer</button>
-  <button id="dev-explode" class="text-sm bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded">Explode now</button>
-  <button id="dev-reset" class="text-sm bg-slate-600 hover:bg-slate-500 text-white px-3 py-1 rounded">Reset simulation</button>
-  <button id="dev-hide" class="text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded">Hide panel</button>
-</div>
-
-<!-- Explosion overlay -->
-<div id="explosion-overlay"></div>
-
-<!-- Referral Code Modal -->
-<div id="referral-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
-  <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-md">
-    <h3 class="text-2xl font-bold mb-3 text-center">Enter a referral code (optional)</h3>
-    <p class="text-sm text-blue-200 mb-4 text-center">
-      Don’t have one? No worries — referral codes can be entered <strong>after purchase</strong> and all benefits will be applied to your account.
-      We’ll send tips on finding a code once your purchase is complete.
-    </p>
-    <input id="referral-code-input" type="text" placeholder="Referral code"
-           class="w-full p-3 mb-4 rounded-md text-black">
-    <div id="stack-count-wrap" class="hidden mb-4">
-      <label for="stack-count" class="block text-sm mb-1">How many licenses do you want to stack for this plan?</label>
-      <select id="stack-count" class="w-full p-3 rounded-md text-black">
-        <option value="1">1 (no stack)</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="5">5</option>
-        <option value="6">6</option>
-        <option value="7">7</option>
-        <option value="8">8</option>
-        <option value="9">9</option>
-        <option value="10">10</option>
-        <option value="11">11</option>
-        <option value="12">12</option>
-        <option value="13">13</option>
-        <option value="14">14</option>
-        <option value="15">15</option>
-        <option value="16">16</option>
-        <option value="17">17</option>
-        <option value="18">18</option>
-        <option value="19">19</option>
-        <option value="20">20</option>
-        <option value="21">21</option>
-        <option value="22">22</option>
-        <option value="23">23</option>
-        <option value="24">24</option>
-        <option value="25">25</option>
-        <option value="26">26</option>
-        <option value="27">27</option>
-        <option value="28">28</option>
-        <option value="29">29</option>
-        <option value="30">30</option>
-      </select>
-      
-      <p class="text-xs text-blue-300 mt-2">You can keep stacking during prelaunch. New stacks use that day’s discount & bonuses.</p>
-    </div>
-    <div class="flex flex-col-reverse sm:flex-row justify-end gap-3">
-      <button id="referral-skip" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">
-        Proceed without Code, I Will Add One Later
-      </button>
-      <button id="referral-continue" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">
-        Code Entered, Continue to Checkout
-      </button>
+  <!-- Sticky mini timer -->
+  <div id="mini-timer" class="fixed bottom-6 right-6 hidden z-50">
+    <div class="timer-box">
+      <div id="mini-timer-display" class="timer-display"></div>
     </div>
   </div>
-</div>
 
-<!-- Pricing & Payment Plans Modal -->
-<div id="plan-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
-  <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-2xl">
-    <h3 class="text-2xl font-bold mb-2 text-center">Choose how you want to pay</h3>
-    <p id="plan-summary" class="text-sm text-blue-200 mb-4 text-center"></p>
+  <!-- Dev controls (temporary) -->
+  <div id="dev-panel"
+    class="fixed bottom-6 left-6 z-50 bg-blue-900/80 backdrop-blur-sm border border-blue-700 rounded-lg p-3 flex flex-wrap gap-2">
+    <button id="dev-hour" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last hour
+      timer</button>
+    <button id="dev-ten" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last 10 minutes
+      timer</button>
+    <button id="dev-tensec" class="text-sm bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded">Last 10 seconds
+      timer</button>
+    <button id="dev-explode" class="text-sm bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded">Explode
+      now</button>
+    <button id="dev-reset" class="text-sm bg-slate-600 hover:bg-slate-500 text-white px-3 py-1 rounded">Reset
+      simulation</button>
+    <button id="dev-hide" class="text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded">Hide
+      panel</button>
+  </div>
 
-    <div id="plan-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4"></div>
-    <p class="text-xs text-blue-300 mb-2">Minimum plan fee is $5 per extra payment. Otherwise the fee is n% of today’s price (n = number of payments). The higher applies.</p>
+  <!-- Explosion overlay -->
+  <div id="explosion-overlay"></div>
 
-    <div class="bg-blue-800/60 rounded-md p-3 mb-4">
-      <p class="text-xs text-blue-100">
-        If a payment plan payment fails and isn’t resolved within 30 days, your account will be reduced to the
-        largest tier/stack fully covered by the payments received (minus the plan’s added percentage) until you
-        catch up. By proceeding, you agree to these terms.
+  <!-- Referral Code Modal -->
+  <div id="referral-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+    <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-md">
+      <h3 class="text-2xl font-bold mb-3 text-center">Enter a referral code (optional)</h3>
+      <p class="text-sm text-blue-200 mb-4 text-center">
+        Don’t have one? No worries — referral codes can be entered <strong>after purchase</strong> and all benefits will
+        be applied to your account.
+        We’ll send tips on finding a code once your purchase is complete.
       </p>
-    </div>
+      <input id="referral-code-input" type="text" placeholder="Referral code"
+        class="w-full p-3 mb-4 rounded-md text-black">
+      <div id="stack-count-wrap" class="hidden mb-4">
+        <label for="stack-count" class="block text-sm mb-1">How many licenses do you want to stack for this
+          plan?</label>
+        <select id="stack-count" class="w-full p-3 rounded-md text-black">
+          <option value="1">1 (no stack)</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="12">12</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15">15</option>
+          <option value="16">16</option>
+          <option value="17">17</option>
+          <option value="18">18</option>
+          <option value="19">19</option>
+          <option value="20">20</option>
+          <option value="21">21</option>
+          <option value="22">22</option>
+          <option value="23">23</option>
+          <option value="24">24</option>
+          <option value="25">25</option>
+          <option value="26">26</option>
+          <option value="27">27</option>
+          <option value="28">28</option>
+          <option value="29">29</option>
+          <option value="30">30</option>
+        </select>
 
-    <div class="flex flex-col sm:flex-row justify-end gap-3">
-      <button id="plan-other" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">Pay another way</button>
-      <button id="plan-pay" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">Pay with card</button>
-      <button id="plan-cancel" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-md">Back</button>
+        <p class="text-xs text-blue-300 mt-2">You can keep stacking during prelaunch. New stacks use that day’s discount
+          & bonuses.</p>
+      </div>
+      <div class="flex flex-col-reverse sm:flex-row justify-end gap-3">
+        <button id="referral-skip" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">
+          Proceed without Code, I Will Add One Later
+        </button>
+        <button id="referral-continue" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">
+          Code Entered, Continue to Checkout
+        </button>
+      </div>
     </div>
   </div>
-</div>
+
+  <!-- Pricing & Payment Plans Modal -->
+  <div id="plan-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
+    <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-2xl">
+      <h3 class="text-2xl font-bold mb-2 text-center">Choose how you want to pay</h3>
+      <p id="plan-summary" class="text-sm text-blue-200 mb-4 text-center"></p>
+
+      <div id="plan-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4"></div>
+      <p class="text-xs text-blue-300 mb-2">Minimum plan fee is $5 per extra payment. Otherwise the fee is n% of today’s
+        price (n = number of payments). The higher applies.</p>
+
+      <div class="bg-blue-800/60 rounded-md p-3 mb-4">
+        <p class="text-xs text-blue-100">
+          If a payment plan payment fails and isn’t resolved within 30 days, your account will be reduced to the
+          largest tier/stack fully covered by the payments received (minus the plan’s added percentage) until you
+          catch up. By proceeding, you agree to these terms.
+        </p>
+      </div>
+
+      <div class="flex flex-col sm:flex-row justify-end gap-3">
+        <button id="plan-other" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">Pay another
+          way</button>
+        <button id="plan-pay" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">Pay with
+          card</button>
+        <button id="plan-cancel" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-md">Back</button>
+      </div>
+    </div>
+  </div>
 
 
 
 
-<button id="dev-show" class="fixed bottom-6 left-6 z-40 hidden bg-blue-700 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded">Show Dev</button>
+  <button id="dev-show"
+    class="fixed bottom-6 left-6 z-40 hidden bg-blue-700 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded">Show
+    Dev</button>
 
-<script src="js/main.js"></script>
-<script>window.SNAP_API_BASE = 'http://localhost:4242';</script>
-<script src="js/checkout.js"></script>
+  <script src="js/main.js"></script>
+  <script>window.SNAP_API_BASE = 'http://localhost:4242';</script>
+  <script src="js/checkout.js"></script>
 
 </body>
+
 </html>

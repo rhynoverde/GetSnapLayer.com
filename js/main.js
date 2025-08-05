@@ -1,6 +1,8 @@
-// main.js: Handles dynamic pricing and countdown for SnapLayer prelaunch site
+// main.js: Handles dynamic pricing, countdown, and banner
 
-const prelaunchStart = new Date('2025-07-27T00:00:00-06:00');
+const API_BASE = window.SNAP_API_BASE || '';
+
+let prelaunchStart = new Date('2025-08-04T00:00:00Z');
 
 // Base prices for each tier
 const basePrices = {
@@ -16,11 +18,22 @@ const dev = {
 };
 
 let explodedToday = false;
+let lastAutoDiscount = null;
 
 // --- Pricing / Discount ---
 function calcDiscount(now = new Date()) {
-  const daysElapsed = Math.floor((now - prelaunchStart) / 86400000);
-  return Math.max(0, 50 - daysElapsed);
+  const cfg = window.__RUNTIME_CFG__ || {};
+  if (cfg.discount_override != null) return cfg.discount_override;
+
+  const d = Math.floor((now - prelaunchStart) / 86_400_000);
+  const raw = 60 - d;                  // starts at 60, drops daily
+  const autoVal = Math.max(50, raw);   // never below 50%
+
+  if (cfg.hold_drop) {
+    if (lastAutoDiscount != null) return lastAutoDiscount;
+  }
+  lastAutoDiscount = autoVal;
+  return autoVal;
 }
 
 function updatePricing() {
@@ -38,14 +51,10 @@ function updatePricing() {
   }
 
   const discountLabel = document.getElementById('todays-discount');
-  if (discountLabel) {
-    discountLabel.textContent = `Today’s Discount: ${discount}% Off`;
-  }
+  if (discountLabel) discountLabel.textContent = `Today’s Discount: ${discount}% Off`;
 
   const headerDiscountText = document.getElementById('header-discount-text');
-  if (headerDiscountText) {
-    headerDiscountText.textContent = `${discount}% discount expires in`;
-  }
+  if (headerDiscountText) headerDiscountText.textContent = `${discount}% discount expires in`;
 
   const tomorrowLine = document.getElementById('tomorrow-line');
   if (tomorrowLine) {
@@ -58,7 +67,12 @@ function updatePricing() {
 
 function updatePlanBonuses() {
   const base = { solo: 250, plus: 1000, pro: 5000, agency: 10000 };
-  const startBonus = { solo: 200, plus: 200, pro: 1000, agency: 2000 }; // Day 1
+  const startBonus = {           // 40% of each tier’s base credits
+    solo  : 100,
+    plus  : 400,
+    pro   : 2000,
+    agency: 4000
+  };
   const now = new Date();
   const daysElapsed = Math.max(0, Math.floor((now - prelaunchStart) / 86400000)); // Day 0-based
   const currentBonus = {};
@@ -78,6 +92,41 @@ function updatePlanBonuses() {
   });
 }
 
+// --- Banner ---
+function renderBanner() {
+  const cfg = window.__RUNTIME_CFG__ || {};
+  const host = document.getElementById('site-banner');
+  if (!host) return;
+
+  const text = (cfg.banner || '').trim();
+  if (!text) { host.classList.add('hidden'); host.innerHTML=''; return; }
+
+  const theme        = (cfg.banner_theme || 'info').toLowerCase();
+  const mode         = (cfg.banner_style || 'static').toLowerCase();
+  const durationSec  = Math.max(6, Math.min(60, Number(cfg.banner_speed || 18)));
+  const dismissible  = (cfg.banner_dismissible !== false);
+
+  const closeBtn = dismissible ? '<button id="banner-close" class="banner-close">×</button>' : '';
+
+  if (mode === 'scroll') {
+    const repeated = Array(8).fill(text).join(' • ');
+    host.innerHTML =
+      '<div class="banner-strip banner-' + theme + ' banner-marquee" style="--duration:' + durationSec + 's">' +
+        '<div class="banner-inner"><span class="track">' + repeated + '</span></div>' +
+        closeBtn +
+      '</div>';
+  } else {
+    host.innerHTML =
+      '<div class="banner-strip banner-' + theme + ' banner-static">' +
+        '<div class="banner-inner">' + text + '</div>' +
+        closeBtn +
+      '</div>';
+  }
+
+  host.classList.remove('hidden');
+  const btn = document.getElementById('banner-close');
+  if (btn) btn.addEventListener('click', () => { host.classList.add('hidden'); });
+}
 
 // --- Time helpers / formatting ---
 function msUntilMidnight(now = new Date()) {
@@ -119,7 +168,6 @@ function applyTimerEffects(remainingMs) {
   apply(headMobile);
 }
 
-
 function explodeAndReset() {
   if (explodedToday) return;
   explodedToday = true;
@@ -135,7 +183,6 @@ function explodeAndReset() {
       updateTimer(); // refresh to new day
     }, { once: true });
   } else {
-    // Safety fallback
     updatePricing();
     updateTimer();
     explodedToday = false;
@@ -161,30 +208,32 @@ function updateTimer() {
 
   applyTimerEffects(remaining);
 
-  if (remaining <= 0) {
-    explodeAndReset();
-  }
+  if (remaining <= 0) explodeAndReset();
 
   if (dev.forceRemainingSec != null && dev.forceRemainingSec > 0) {
     dev.forceRemainingSec -= 1;
   }
 }
 
-
 function showMiniTimerIfNeeded() {
   const mini = document.getElementById('mini-timer');
   const hero = document.getElementById('hero');
   if (!mini || !hero) return;
   const threshold = hero.offsetTop + hero.offsetHeight - 120;
-  if (window.scrollY > threshold) {
-    mini.classList.remove('hidden');
-  } else {
-    mini.classList.add('hidden');
-  }
+  if (window.scrollY > threshold) mini.classList.remove('hidden');
+  else mini.classList.add('hidden');
 }
 
 // --- Init ---
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const r = await fetch(`${API_BASE}/api/runtime-config`);
+    const s = await r.json().catch(() => ({}));
+    if (s.prelaunchStart) prelaunchStart = new Date(s.prelaunchStart);
+    if (s.cfg) window.__RUNTIME_CFG__ = s.cfg;
+  } catch {}
+
+  renderBanner();
   updatePricing();
   updateTimer();
   setInterval(updateTimer, 1000);
@@ -193,11 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const logo = document.getElementById('snaplayer-logo');
   const onScroll = () => {
     if (logo) {
-      if (window.scrollY > 20) {
-        logo.classList.add('logo-small');
-      } else {
-        logo.classList.remove('logo-small');
-      }
+      if (window.scrollY > 20) logo.classList.add('logo-small');
+      else logo.classList.remove('logo-small');
     }
     showMiniTimerIfNeeded();
   };
@@ -206,40 +252,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Mobile hamburger
   const menuToggle = document.getElementById('menu-toggle');
-  const mobileNav = document.getElementById('mobile-nav');
+  const mobileNav  = document.getElementById('mobile-nav');
   if (menuToggle && mobileNav) {
-    menuToggle.addEventListener('click', () => {
-      mobileNav.classList.toggle('hidden');
-    });
+    menuToggle.addEventListener('click', () => mobileNav.classList.toggle('hidden'));
   }
 
-  // Dev panel buttons (simulate last hour / last 10 min / last 10 sec / explode / reset)
-  const btnHour = document.getElementById('dev-hour');
-  const btnTen = document.getElementById('dev-ten');
+  // Dev panel buttons
+  const btnHour   = document.getElementById('dev-hour');
+  const btnTen    = document.getElementById('dev-ten');
   const btnTenSec = document.getElementById('dev-tensec');
-  const btnReset = document.getElementById('dev-reset');
-  const btnExplode = document.getElementById('dev-explode');
-  const btnHide = document.getElementById('dev-hide');
-  const btnShow = document.getElementById('dev-show');
-  const devPanel = document.getElementById('dev-panel');
+  const btnReset  = document.getElementById('dev-reset');
+  const btnExplode= document.getElementById('dev-explode');
+  const btnHide   = document.getElementById('dev-hide');
+  const btnShow   = document.getElementById('dev-show');
+  const devPanel  = document.getElementById('dev-panel');
 
-  if (btnHour) btnHour.addEventListener('click', () => { dev.forceRemainingSec = 3600; updateTimer(); });
-  if (btnTen) btnTen.addEventListener('click', () => { dev.forceRemainingSec = 600; updateTimer(); });
-  if (btnTenSec) btnTenSec.addEventListener('click', () => { dev.forceRemainingSec = 10; updateTimer(); });
-  if (btnReset) btnReset.addEventListener('click', () => { dev.forceRemainingSec = null; updateTimer(); });
-  if (btnExplode) btnExplode.addEventListener('click', () => { dev.forceRemainingSec = 0; updateTimer(); });
+  if (btnHour)   btnHour.addEventListener('click', () => { dev.forceRemainingSec = 3600; updateTimer(); });
+  if (btnTen)    btnTen.addEventListener('click',  () => { dev.forceRemainingSec = 600;  updateTimer(); });
+  if (btnTenSec) btnTenSec.addEventListener('click', () => { dev.forceRemainingSec = 10;  updateTimer(); });
+  if (btnReset)  btnReset.addEventListener('click', () => { dev.forceRemainingSec = null; updateTimer(); });
+  if (btnExplode)btnExplode.addEventListener('click',() => { dev.forceRemainingSec = 0;   updateTimer(); });
   if (btnHide && btnShow && devPanel) {
     btnHide.addEventListener('click', () => { devPanel.classList.add('hidden'); btnShow.classList.remove('hidden'); });
     btnShow.addEventListener('click', () => { devPanel.classList.remove('hidden'); btnShow.classList.add('hidden'); });
   }
 
-  // Image style toggle for "Why Buy Now?" artwork
+  // Image style toggle for "Why Buy Now?"
   const toggle = document.getElementById('style-toggle');
   const imageMap = {
-    'built-for-speed': { uniform: 'images/built-for-speed-uniform-style.jpg', alt: 'images/built-for-speed-style-002.jpg' },
-    'reuse-or-resell': { uniform: 'images/resell-or-reuse-uniform-style.jpg', alt: 'images/reuse-or-resell-style-002.jpg' },
-    'stack-accounts': { uniform: 'images/stack-accounts-uniform-style.jpg', alt: 'images/stack-accounts-style-002.jpg' },
-    'shape-the-product': { uniform: 'images/shape-the-product-uniform-style.jpg', alt: 'images/shape-the-project-style-002.jpg' }
+    'built-for-speed'  : { uniform: 'images/built-for-speed-uniform-style.jpg',  alt: 'images/built-for-speed-style-002.jpg' },
+    'reuse-or-resell'  : { uniform: 'images/resell-or-reuse-uniform-style.jpg',  alt: 'images/reuse-or-resell-style-002.jpg' },
+    'stack-accounts'   : { uniform: 'images/stack-accounts-uniform-style.jpg',   alt: 'images/stack-accounts-style-002.jpg' },
+    'shape-the-product': { uniform: 'images/shape-the-product-uniform-style.jpg',alt: 'images/shape-the-project-style-002.jpg' }
   };
   let useAlt = false;
   const applyStyle = () => {
@@ -249,16 +293,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
   if (toggle) {
-    toggle.addEventListener('click', () => { useAlt = !useAlt; applyStyle(); toggle.textContent = useAlt ? 'Show Uniform Style' : 'Show Style 002'; });
+    toggle.addEventListener('click', () => {
+      useAlt = !useAlt;
+      applyStyle();
+      toggle.textContent = useAlt ? 'Show Uniform Style' : 'Show Style 002';
+    });
     applyStyle();
   }
 
   // Reveal-on-scroll for features
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-      if (e.isIntersecting) e.target.classList.add('opacity-100', 'translate-y-0');
-    });
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('opacity-100','translate-y-0'); });
   }, { threshold: 0.15 });
   document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
 });
-

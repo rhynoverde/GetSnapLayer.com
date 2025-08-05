@@ -90,18 +90,33 @@ const APP_BASE = process.env.APP_BASE || 'http://localhost:4242';
 const PRODUCT_IDS = { solo: 'snap_solo_ltd', plus: 'snap_plus_ltd', pro: 'snap_pro_ltd', agency: 'snap_agency_ltd' };
 const BASE_PRICES = { solo: 49, plus: 149, pro: 299, agency: 499 };
 const BASE_CREDITS = { solo: 250, plus: 1000, pro: 5000, agency: 10000 };
-const START_BONUS = { solo: 200, plus: 200, pro: 1000, agency: 2000 };
+const START_BONUS = {           // 40 % of BASE_CREDITS
+    solo  : 100,
+    plus  : 400,
+    pro   : 2000,
+    agency: 4000
+};
 const PRELAUNCH = new Date('2025-07-27T00:00:00-06:00');
 
 function calcDiscount(now = new Date()) {
     const d = Math.floor((now - PRELAUNCH) / 86_400_000);
-    return Math.max(0, 50 - d);
+    const raw = 60 - d;
+    return Math.max(50, raw);
 }
 function calcBonus(tier, now = new Date()) {
+    if (cfg.bonus_override != null) return cfg.bonus_override;
+  
     const d = Math.floor((now - PRELAUNCH) / 86_400_000);
     const drop = Math.round(START_BONUS[tier] * 0.02 * d);
-    return Math.max(0, START_BONUS[tier] - drop);
-}
+    const autoVal = Math.max(0, START_BONUS[tier] - drop);
+  
+    if (cfg.hold_drop) {
+      if (lastAutoBonus[tier] != null) return lastAutoBonus[tier];
+    }
+    lastAutoBonus[tier] = autoVal;
+    return autoVal;
+  }
+  
 
 const T = {
     purchasers   : process.env.NOCO_TABLE_PURCHASERS    || 'ltd_purchasers',
@@ -115,6 +130,60 @@ const T = {
 
 const app = express();
 app.use(cors());
+
+/* ─── runtime-config (shared) ─── */
+const cfg = {
+    discount_override : null,
+    bonus_override    : null,
+    hold_drop         : false,
+    banner            : '',
+    banner_style      : 'static',     // 'static' | 'scroll'
+    banner_theme      : 'info',       // 'info' | 'warning' | 'success' | 'danger'
+    banner_speed      : 18,           // seconds for scroll
+    banner_dismissible: true
+  };
+  
+let lastAutoDiscount = null;
+let lastAutoBonus    = {};
+/* ─────────────────────────────── */
+
+
+// --- Control-room basic auth ---
+function adminAuth(req, res, next) {
+    // --- DEV ONLY: allow requests from localhost without Basic-Auth ---
+    if (req.ip === '::1' || req.ip === '127.0.0.1') return next();
+    // ------------------------------------------------------------------
+  
+    const hdr = req.headers.authorization || '';
+    if (!hdr.startsWith('Basic ')) {
+      res.set('WWW-Authenticate', 'Basic realm="Control Room"');
+      return res.status(401).end();
+    }
+    const [user, pass] = Buffer.from(hdr.slice(6), 'base64').toString().split(':');
+    if (user === process.env.ADMIN_BASIC_USER && pass === process.env.ADMIN_BASIC_PASS) {
+      return next();
+    }
+    res.set('WWW-Authenticate', 'Basic realm="Control Room"');
+    return res.status(401).end();
+  }
+  
+
+// Serve anything inside ./admin when the auth passes
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+app.use(
+  '/control-room',
+  adminAuth,
+  express.static(path.join(__dirname, '..', 'admin'))
+);
+
+// Fallback for /control-room if no admin/index.html yet
+app.get('/control-room', adminAuth, (req, res) => {
+  res.send('<h1 style="font-family:system-ui">SnapLayer Control Room</h1><p>Add your dashboard to /admin/index.html</p>');
+});
+
 
 const inflightSessions = new Map();
 const processedSessions = new Set();
@@ -348,7 +417,30 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
 
 /* JSON parser AFTER webhook */
 app.use(express.json());
-app.get('/health', (req, res) => res.send('ok'));
+
+
+app.get('/api/runtime-config', (req, res) => {
+    const start = (typeof PRELAUNCH !== 'undefined' && PRELAUNCH instanceof Date)
+      ? PRELAUNCH.toISOString()
+      : (process.env.PRELAUNCH_START || '2025-08-04T00:00:00Z');
+    res.json({ prelaunchStart: start, cfg });
+  });
+    
+  app.get('/control-room/toggles', adminAuth, (req, res) => {
+    res.json(cfg);
+  });
+  
+  app.post('/control-room/toggles', adminAuth, (req, res) => {
+    const body = req.body || {};
+    cfg.discount_override = Number(body.discount_override) || null;
+    cfg.bonus_override    = Number(body.bonus_override) || null;
+    cfg.hold_drop         = !!body.hold_drop;
+    cfg.banner            = (body.banner || '').toString().slice(0, 280);
+    res.json({ ok: true, ...cfg });
+  });
+  
+  app.get('/health', (req, res) => res.send('ok'));
+  
 
 app.post('/api/alt-pay-request', async (req, res) => {
   try {
@@ -422,7 +514,39 @@ app.post('/api/check-code', async (req, res) => {
     }
 });
 
-/* Redeem a referral code AFTER purchase */
+/* Generate (or fetch) today’s referral code */
+app.post('/api/referrals/generate', async (req, res) => {
+    const { ownerEmail = '' } = req.body || {};
+    if (!ownerEmail) return res.status(400).json({ error: 'email_required' });
+
+    const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+    const today   = new Date().toISOString().slice(0, 10);         // YYYY-MM-DD
+
+    try {
+        /* 1) Already issued today? */
+        const q = `${process.env.NOCO_API_URL}/${T.codes}?limit=1&where=(owner_email,eq,${ownerEmail})~and(issued_date,eq,${today})`;
+        const { data } = await axios.get(q, headers);
+        if (data.list?.[0]) return res.json({ code: data.list[0].code });
+
+        /* 2) Make a fresh 7-char code */
+        const code = Math.random().toString(36).slice(2, 9).toUpperCase();
+        await axios.post(`${process.env.NOCO_API_URL}/${T.codes}`, {
+            code,
+            owner_email: ownerEmail,
+            issued_date: today,
+            status     : 'issued'
+        }, headers);
+
+        /* 3) Roll-up owner table (creates row if missing) */
+        await axios.post(`${process.env.NOCO_API_URL}/rpc/upsert_referral_owner`,   // optional stored proc
+            { email: ownerEmail }, headers).catch(() => {});
+
+        return res.json({ code });
+    } catch (e) {
+        console.error('generate-code error', e.response?.data || e.message);
+        return res.status(500).json({ error: 'server_error' });
+    }
+});
 app.post('/api/referrals/redeem-after', async (req, res) => {
     const { code, purchaserEmail } = req.body || {};
     if (!code || !purchaserEmail) return res.status(400).json({ error: 'code_and_email_required' });
@@ -786,6 +910,41 @@ app.post('/api/pricing-options', async (req, res) => {
       res.status(500).json({ error: 'stripe_error' });
     }
   });
+  
+  let discountHold = false;
+  let bonusHold = false;
+  let bannerMsg = '';
+  
+  app.post('/control-room/toggles', adminAuth, express.json(), (req, res) => {
+    const {
+      discount_override = null,
+      bonus_override    = null,
+      hold_drop         = null,
+      banner            = null,
+      banner_style      = null,
+      banner_theme      = null,
+      banner_speed      = null,
+      banner_dismissible= null
+    } = req.body || {};
+  
+    if (discount_override !== null) cfg.discount_override = (discount_override === '' ? null : Number(discount_override));
+    if (bonus_override    !== null) cfg.bonus_override    = (bonus_override === '' ? null : Number(bonus_override));
+    if (hold_drop         !== null) cfg.hold_drop         = !!hold_drop;
+    if (banner            !== null) cfg.banner            = String(banner);
+  
+    if (banner_style      !== null) cfg.banner_style      = String(banner_style || 'static');
+    if (banner_theme      !== null) cfg.banner_theme      = String(banner_theme || 'info');
+    if (banner_speed      !== null) cfg.banner_speed      = Math.max(6, Math.min(60, Number(banner_speed) || 18));
+    if (banner_dismissible!== null) cfg.banner_dismissible= !!banner_dismissible;
+  
+    res.json(cfg);
+  });
+  
+  
+app.get('/control-room/toggles', adminAuth, (req, res) => {
+    res.json(cfg);
+});
+
 
   
 
