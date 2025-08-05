@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><title>SnapLayer – Control Room</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white p-6">
+<h1 class="text-3xl font-bold mb-4">Control Room</h1>
+
+<form id="cfgForm" class="space-y-4 max-w-md">
+    <label class="block">
+      <span class="text-sm">Discount % override (empty = auto)</span>
+      <input id="discount" type="number" min="0" max="100" class="mt-1 w-full text-black p-2 rounded" />
+    </label>
+  
+    <label class="block">
+      <span class="text-sm">Bonus credit % override (empty = auto)</span>
+      <input id="bonus" type="number" min="0" max="100" class="mt-1 w-full text-black p-2 rounded" />
+    </label>
+  
+    <label class="inline-flex items-center">
+      <input id="hold" type="checkbox" class="mr-2" />
+      <span>Hold today’s drop</span>
+    </label>
+  
+    <div class="border-t border-slate-700 pt-4"></div>
+  
+    <label class="block">
+      <span class="text-sm">Banner message (optional)</span>
+      <textarea id="banner" rows="2" class="mt-1 w-full text-black p-2 rounded" placeholder="Short message…"></textarea>
+    </label>
+  
+    <div class="grid grid-cols-2 gap-3">
+      <label class="block">
+        <span class="text-sm">Banner style</span>
+        <select id="bannerStyle" class="mt-1 w-full text-black p-2 rounded">
+          <option value="static">Static</option>
+          <option value="scroll">Scrolling</option>
+        </select>
+      </label>
+  
+      <label class="block">
+        <span class="text-sm">Theme</span>
+        <select id="bannerTheme" class="mt-1 w-full text-black p-2 rounded">
+          <option value="info">Info (blue/purple)</option>
+          <option value="warning">Warning (amber)</option>
+          <option value="success">Success (green)</option>
+          <option value="danger">Danger (red)</option>
+        </select>
+      </label>
+    </div>
+  
+    <div class="grid grid-cols-2 gap-3">
+      <label class="block">
+        <span class="text-sm">Scroll speed (seconds)</span>
+        <input id="bannerSpeed" type="number" min="6" max="60" value="18" class="mt-1 w-full text-black p-2 rounded" />
+      </label>
+  
+      <label class="inline-flex items-center mt-7">
+        <input id="bannerDismiss" type="checkbox" class="mr-2" checked />
+        <span>Allow dismiss</span>
+      </label>
+    </div>
+  
+    <button type="submit" class="bg-pink-500 hover:bg-pink-600 px-4 py-2 rounded">Save</button>
+    <span id="status" class="ml-3 text-sm"></span>
+  </form>
+  
+  <script>
+  async function load() {
+    const r = await fetch('/control-room/toggles', { credentials: 'include' });
+    const s = await r.json();
+    if (s.discount_override != null) document.getElementById('discount').value = s.discount_override;
+    if (s.bonus_override    != null) document.getElementById('bonus').value    = s.bonus_override;
+    document.getElementById('hold').checked = !!s.hold_drop;
+    document.getElementById('banner').value = s.banner || '';
+    document.getElementById('bannerStyle').value = s.banner_style || 'static';
+    document.getElementById('bannerTheme').value = s.banner_theme || 'info';
+    document.getElementById('bannerSpeed').value = s.banner_speed || 18;
+    document.getElementById('bannerDismiss').checked = (s.banner_dismissible !== false);
+  }
+  
+  document.getElementById('cfgForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {
+      discount_override : document.getElementById('discount').value,
+      bonus_override    : document.getElementById('bonus').value,
+      hold_drop         : document.getElementById('hold').checked,
+      banner            : document.getElementById('banner').value.trim(),
+      banner_style      : document.getElementById('bannerStyle').value,
+      banner_theme      : document.getElementById('bannerTheme').value,
+      banner_speed      : Number(document.getElementById('bannerSpeed').value),
+      banner_dismissible: document.getElementById('bannerDismiss').checked
+    };
+    const r = await fetch('/control-room/toggles', {
+      credentials:'include',
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    document.getElementById('status').textContent = r.ok ? '✓ saved' : 'error';
+  };
+  
+  load();
+  </script>
+  
+</body>
+</html>
