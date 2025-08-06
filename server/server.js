@@ -15,66 +15,62 @@ async function awardReferralCreditsForInvoice(invoice) {
         if (!subscriptionId) return;
 
         const sub = await stripeClient.subscriptions.retrieve(subscriptionId);
-        const md  = sub.metadata || {};
+        const md = sub.metadata || {};
 
-        const installments   = Math.max(1, parseInt(md.installments || '1', 10));
-        const stackCount     = Math.max(1, parseInt(md.stack_count  || '1', 10));
-        const perUnitExtra   = Math.max(0, parseInt(md.referralExtra || '0', 10));
-        const refOwnerEmail  = md.refOwnerEmail || '';
-        const referralUsed   = !!(md.referralCodeUsed || '');
+        const installments = Math.max(1, parseInt(md.installments || '1', 10));
+        const stackCount = Math.max(1, parseInt(md.stack_count || '1', 10));
+        const perUnitExtra = Math.max(0, parseInt(md.referralExtra || '0', 10));
+        const refOwnerEmail = md.refOwnerEmail || '';
+        const referralUsed = !!(md.referralCodeUsed || '');
         const purchaserEmail = invoice.customer_email || '';
 
-        // Only applicable to installment plans that actually used a referral
         if (!referralUsed || !refOwnerEmail || perUnitExtra <= 0 || installments <= 1) return;
 
         const totalExtra = perUnitExtra * stackCount;
 
-        // Determine which installment index we are on by counting prior "referrer" rows
         const qCount = `${process.env.NOCO_API_URL}/${T.creditsLedger}?limit=9999&where=(subscription_id,eq,${subscriptionId})~and(type,eq,installment_referral)~and(role,eq,referrer)`;
         const { data: led } = await axios.get(qCount, headers).catch(() => ({ data: { list: [] } }));
         const priorReferrerRows = Array.isArray(led.list) ? led.list.length : 0;
         const thisIndex = priorReferrerRows + 1;
         if (thisIndex > installments) return;
 
-        // Pro-rata per installment; last payment gets remainder
-        const basePer   = Math.floor(totalExtra / installments);
+        const basePer = Math.floor(totalExtra / installments);
         const remainder = totalExtra - basePer * (installments - 1);
-        const awardNow  = (thisIndex === installments) ? remainder : basePer;
+        const awardNow = (thisIndex === installments) ? remainder : basePer;
         if (awardNow <= 0) return;
 
-        // Idempotency by invoice_id + role; if either row exists, skip that row
-        const qReferee  = `${process.env.NOCO_API_URL}/${T.creditsLedger}?limit=1&where=(invoice_id,eq,${invoice.id})~and(role,eq,referee)`;
+        const qReferee = `${process.env.NOCO_API_URL}/${T.creditsLedger}?limit=1&where=(invoice_id,eq,${invoice.id})~and(role,eq,referee)`;
         const qReferrer = `${process.env.NOCO_API_URL}/${T.creditsLedger}?limit=1&where=(invoice_id,eq,${invoice.id})~and(role,eq,referrer)`;
         const [r1, r2] = await Promise.all([
             axios.get(qReferee, headers).catch(() => ({ data: { list: [] } })),
             axios.get(qReferrer, headers).catch(() => ({ data: { list: [] } }))
         ]);
-        const hasReferee  = (r1.data?.list || []).length > 0;
+        const hasReferee = (r1.data?.list || []).length > 0;
         const hasReferrer = (r2.data?.list || []).length > 0;
 
         const rows = [];
         if (!hasReferee) {
             rows.push({
-                type            : 'installment_referral',
-                subscription_id : subscriptionId,
-                invoice_id      : invoice.id,
-                installment_idx : thisIndex,
-                recipient_email : purchaserEmail,
-                amount          : awardNow,
-                direction       : 'credit',
-                role            : 'referee'
+                type: 'installment_referral',
+                subscription_id: subscriptionId,
+                invoice_id: invoice.id,
+                installment_idx: thisIndex,
+                recipient_email: purchaserEmail,
+                amount: awardNow,
+                direction: 'credit',
+                role: 'referee'
             });
         }
         if (!hasReferrer) {
             rows.push({
-                type            : 'installment_referral',
-                subscription_id : subscriptionId,
-                invoice_id      : invoice.id,
-                installment_idx : thisIndex,
-                recipient_email : refOwnerEmail,
-                amount          : awardNow,
-                direction       : 'credit',
-                role            : 'referrer'
+                type: 'installment_referral',
+                subscription_id: subscriptionId,
+                invoice_id: invoice.id,
+                installment_idx: thisIndex,
+                recipient_email: refOwnerEmail,
+                amount: awardNow,
+                direction: 'credit',
+                role: 'referrer'
             });
         }
 
@@ -86,14 +82,54 @@ async function awardReferralCreditsForInvoice(invoice) {
     }
 }
 
+async function recordInstallmentForInvoice(invoice) {
+    try {
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+        const subscriptionId = invoice.subscription || '';
+        if (!subscriptionId) return;
+
+        // idempotency: if we already recorded this invoice, bail
+        const qExist = `${process.env.NOCO_API_URL}/${T.installments}?limit=1&where=(invoice_id,eq,${invoice.id})`;
+        const { data: ex } = await axios.get(qExist, headers).catch(() => ({ data: { list: [] } }));
+        if ((ex.list || []).length) return;
+
+        // locate the purchase row by subscription_id
+        const qPurchase = `${process.env.NOCO_API_URL}/${T.purchases}?limit=1&where=(subscription_id,eq,${subscriptionId})`;
+        const { data: p } = await axios.get(qPurchase, headers).catch(() => ({ data: { list: [] } }));
+        const purchase = (p.list || [])[0];
+        if (!purchase) return;
+
+        // next installment number for this purchase
+        const purchaseId = purchase.Id || purchase.id;
+        const qCount = `${process.env.NOCO_API_URL}/${T.installments}?limit=0&where=(purchase_id,eq,${purchaseId})`;
+        const { data: c } = await axios.get(qCount, headers).catch(() => ({ data: { count: 0 } }));
+        const number = (c.count || 0) + 1;
+
+        const paidAt = (invoice.status_transitions?.paid_at ? new Date(invoice.status_transitions.paid_at * 1000) : new Date()).toISOString();
+        const amount = ((invoice.amount_paid || invoice.amount_due || 0) / 100);
+
+        await axios.post(`${process.env.NOCO_API_URL}/${T.installments}`, {
+            purchase_id: purchaseId,
+            installment_number: number,
+            amount_paid: amount,
+            currency: (invoice.currency || 'usd').toUpperCase(),
+            invoice_id: invoice.id,
+            paid_at: paidAt
+        }, headers);
+    } catch (e) {
+        console.error('recordInstallmentForInvoice error', e.response?.data || e.message);
+    }
+}
+
+
 const APP_BASE = process.env.APP_BASE || 'http://localhost:4242';
 const PRODUCT_IDS = { solo: 'snap_solo_ltd', plus: 'snap_plus_ltd', pro: 'snap_pro_ltd', agency: 'snap_agency_ltd' };
 const BASE_PRICES = { solo: 49, plus: 149, pro: 299, agency: 499 };
 const BASE_CREDITS = { solo: 250, plus: 1000, pro: 5000, agency: 10000 };
 const START_BONUS = {           // 40 % of BASE_CREDITS
-    solo  : 100,
-    plus  : 400,
-    pro   : 2000,
+    solo: 100,
+    plus: 400,
+    pro: 2000,
     agency: 4000
 };
 const PRELAUNCH = new Date('2025-07-27T00:00:00-06:00');
@@ -105,27 +141,29 @@ function calcDiscount(now = new Date()) {
 }
 function calcBonus(tier, now = new Date()) {
     if (cfg.bonus_override != null) return cfg.bonus_override;
-  
+
     const d = Math.floor((now - PRELAUNCH) / 86_400_000);
     const drop = Math.round(START_BONUS[tier] * 0.02 * d);
     const autoVal = Math.max(0, START_BONUS[tier] - drop);
-  
+
     if (cfg.hold_drop) {
-      if (lastAutoBonus[tier] != null) return lastAutoBonus[tier];
+        if (lastAutoBonus[tier] != null) return lastAutoBonus[tier];
     }
     lastAutoBonus[tier] = autoVal;
     return autoVal;
-  }
-  
+}
+
 
 const T = {
-    purchasers   : process.env.NOCO_TABLE_PURCHASERS    || 'ltd_purchasers',
-    owners       : process.env.NOCO_TABLE_OWNERS        || 'ltd_referral_owners',
-    codes        : process.env.NOCO_TABLE_CODES         || 'ltd_referral_codes',
-    redemptions  : process.env.NOCO_TABLE_REDEMPTIONS   || 'ltd_referral_redemptions',
-    licenses     : process.env.NOCO_TABLE_LICENSES      || 'ltd_licenses',
-    altpay       : process.env.NOCO_TABLE_ALTPAY        || 'alt_pay_requests',
-    creditsLedger: process.env.NOCO_TABLE_CREDITS_LEDGER|| 'ltd_credits_ledger'
+    purchases: process.env.NOCO_TABLE_PURCHASES || 'ltd_purchases',
+    users: process.env.NOCO_TABLE_USERS || 'ltd_users',
+    owners: process.env.NOCO_TABLE_OWNERS || 'ltd_referral_owners',
+    codes: process.env.NOCO_TABLE_CODES || 'ltd_referral_codes',
+    redemptions: process.env.NOCO_TABLE_REDEMPTIONS || 'ltd_referral_redemptions',
+    licenses: process.env.NOCO_TABLE_LICENSES || 'ltd_licenses',
+    altpay: process.env.NOCO_TABLE_ALTPAY || 'alt_pay_requests',
+    creditsLedger: process.env.NOCO_TABLE_CREDITS_LEDGER || 'ltd_credits_ledger',
+    installments: process.env.NOCO_TABLE_INSTALLMENTS || 'ltd_installments'
 };
 
 const app = express();
@@ -133,18 +171,18 @@ app.use(cors());
 
 /* ─── runtime-config (shared) ─── */
 const cfg = {
-    discount_override : null,
-    bonus_override    : null,
-    hold_drop         : false,
-    banner            : '',
-    banner_style      : 'static',     // 'static' | 'scroll'
-    banner_theme      : 'info',       // 'info' | 'warning' | 'success' | 'danger'
-    banner_speed      : 18,           // seconds for scroll
+    discount_override: null,
+    bonus_override: null,
+    hold_drop: false,
+    banner: '',
+    banner_style: 'static',     // 'static' | 'scroll'
+    banner_theme: 'info',       // 'info' | 'warning' | 'success' | 'danger'
+    banner_speed: 18,           // seconds for scroll
     banner_dismissible: true
-  };
-  
+};
+
 let lastAutoDiscount = null;
-let lastAutoBonus    = {};
+let lastAutoBonus = {};
 /* ─────────────────────────────── */
 
 
@@ -153,20 +191,20 @@ function adminAuth(req, res, next) {
     // --- DEV ONLY: allow requests from localhost without Basic-Auth ---
     if (req.ip === '::1' || req.ip === '127.0.0.1') return next();
     // ------------------------------------------------------------------
-  
+
     const hdr = req.headers.authorization || '';
     if (!hdr.startsWith('Basic ')) {
-      res.set('WWW-Authenticate', 'Basic realm="Control Room"');
-      return res.status(401).end();
+        res.set('WWW-Authenticate', 'Basic realm="Control Room"');
+        return res.status(401).end();
     }
     const [user, pass] = Buffer.from(hdr.slice(6), 'base64').toString().split(':');
     if (user === process.env.ADMIN_BASIC_USER && pass === process.env.ADMIN_BASIC_PASS) {
-      return next();
+        return next();
     }
     res.set('WWW-Authenticate', 'Basic realm="Control Room"');
     return res.status(401).end();
-  }
-  
+}
+
 
 // Serve anything inside ./admin when the auth passes
 import path from 'path';
@@ -174,14 +212,14 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 app.use(
-  '/control-room',
-  adminAuth,
-  express.static(path.join(__dirname, '..', 'admin'))
+    '/control-room',
+    adminAuth,
+    express.static(path.join(__dirname, '..', 'admin'))
 );
 
 // Fallback for /control-room if no admin/index.html yet
 app.get('/control-room', adminAuth, (req, res) => {
-  res.send('<h1 style="font-family:system-ui">SnapLayer Control Room</h1><p>Add your dashboard to /admin/index.html</p>');
+    res.send('<h1 style="font-family:system-ui">SnapLayer Control Room</h1><p>Add your dashboard to /admin/index.html</p>');
 });
 
 
@@ -193,32 +231,56 @@ async function handleCheckoutCompleted(s) {
 
     // 1) Purchaser (idempotent by checkout_session_id)
     try {
-        const purchaserCheckUrl = `${process.env.NOCO_API_URL}/${T.purchasers}?limit=1&where=(checkout_session_id,eq,${s.id})`;
+        const purchaserCheckUrl = `${process.env.NOCO_API_URL}/${T.purchases}?limit=1&where=(checkout_session_id,eq,${s.id})`;
         const { data: purchaserExisting } = await axios.get(purchaserCheckUrl, headers).catch(() => ({ data: { list: [] } }));
         const purchaserAlready = Array.isArray(purchaserExisting.list) && purchaserExisting.list.length > 0;
 
         if (!purchaserAlready) {
-            await axios.post(`${process.env.NOCO_API_URL}/${T.purchasers}`, {
-                checkout_session_id : s.id,
-                payment_intent_id   : s.payment_intent || '',
-                stripe_customer_id  : s.customer || '',
-                email               : s.customer_details?.email || '',
-                customer_name       : s.customer_details?.name || '',
-                phone               : s.customer_details?.phone || '',
-                tier                : s.metadata.tier,
-                currency            : s.currency || 'usd',
-                price_paid          : (s.amount_total || 0) / 100,
-                discount_percent    : 100 - ((s.amount_total || 0) / 100) / BASE_PRICES[s.metadata.tier] * 100,
-                discount_source     : s.metadata.referralCodeUsed ? 'referral' : 'daily',
-                base_credits        : Number(s.metadata.baseCredits || 0),
-                bonus_credits       : Number(s.metadata.bonusCredits || 0),
-                referral_extra      : Number(s.metadata.referralExtra || 0),
-                referral_code_used  : s.metadata.referralCodeUsed || '',
+            const purchaserEmail = s.customer_details?.email || '';
+            let userId = null;
+            try {
+                const { data: u1 } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(email,eq,${purchaserEmail})`, headers);
+                if (u1.list?.[0]) {
+                    userId = u1.list[0].Id || u1.list[0].id;
+                } else {
+                    const { data: u2 } = await axios.post(`${process.env.NOCO_API_URL}/${T.users}`, { email: purchaserEmail, username: (purchaserEmail || '').split('@')[0] }, headers);
+                    userId = u2.Id || u2.id;
+                }
+            } catch { }
+
+            const qty = Math.max(1, parseInt(s.metadata.stack_count || s.metadata.agency_stacked || '1', 10));
+            const baseTotal = BASE_PRICES[s.metadata.tier] * qty;
+            const planTotal = (Number(s.metadata.plan_total_cents || 0) / 100) || baseTotal * (1 - (calcDiscount(new Date()) / 100));
+            const discountPct = Math.max(0, Math.round((1 - planTotal / baseTotal) * 100));
+
+            await axios.post(`${process.env.NOCO_API_URL}/${T.purchases}`, {
+                user_id: userId,
+                checkout_session_id: s.id,
+                payment_intent_id: s.payment_intent || '',
+                stripe_customer_id: s.customer || '',
+                subscription_id: s.subscription || '',
+                installments: parseInt(s.metadata?.installments || '1', 10),
+                email: purchaserEmail,
+                customer_name: s.customer_details?.name || '',
+                phone: s.customer_details?.phone || '',
+                tier: s.metadata.tier,
+                currency: (s.currency || 'usd').toUpperCase(),
+                amount_total_usd: (s.amount_total || 0) / 100,
+                plan_total: planTotal,
+                discount_percent: discountPct,
+                discount_source: s.metadata.referralCodeUsed ? 'referral' : 'daily',
+                base_credits: Number(s.metadata.baseCredits || 0),
+                bonus_credits: Number(s.metadata.bonusCredits || 0),
+                referral_extra: Number(s.metadata.referralExtra || 0),
+                referral_code_used: s.metadata.referralCodeUsed || '',
                 referral_owner_email: s.metadata.refOwnerEmail || '',
-                purchased_at        : new Date().toISOString(),
-                raw_session         : s
+                stack_count: qty,
+                status: 'paid',
+                purchased_at: new Date().toISOString(),
+                raw_session: s
             }, headers).catch(e => console.error('NocoDB purchase error', e.response?.data || e.message));
         }
+
     } catch (e) {
         console.error('purchaser block error', e.response?.data || e.message);
     }
@@ -255,14 +317,14 @@ async function handleCheckoutCompleted(s) {
                 // Redemption insert
                 await axios.post(`${process.env.NOCO_API_URL}/${T.redemptions}`, {
                     code,
-                    purchaser_email         : s.customer_details?.email || '',
-                    tier_purchased          : s.metadata.tier,
+                    purchaser_email: s.customer_details?.email || '',
+                    tier_purchased: s.metadata.tier,
                     discount_percent_applied: 50,
-                    credit_value            : Number(s.metadata.referralExtra || 0),
-                    redeemed_ts             : new Date().toISOString(),
-                    checkout_session_id     : s.id,
-                    amount_total_usd        : (s.amount_total || 0) / 100,
-                    agency_stacked          : Number(s.metadata?.stack_count || s.metadata?.agency_stacked || 1)
+                    credit_value: Number(s.metadata.referralExtra || 0),
+                    redeemed_ts: new Date().toISOString(),
+                    checkout_session_id: s.id,
+                    amount_total_usd: (s.amount_total || 0) / 100,
+                    agency_stacked: Number(s.metadata?.stack_count || s.metadata?.agency_stacked || 1)
                 }, headers).catch(e => console.error('NocoDB redemption error', e.response?.data || e.message));
 
                 // Owner bump (upsert-ish)
@@ -279,8 +341,8 @@ async function handleCheckoutCompleted(s) {
                                 `${process.env.NOCO_API_URL}/${T.owners}/${owner.Id || owner.id}`,
                                 {
                                     total_redemptions: (owner.total_redemptions || 0) + 1,
-                                    credits_earned   : (owner.credits_earned   || 0) + Number(s.metadata.referralExtra || 0),
-                                    updated_ts       : new Date().toISOString()
+                                    credits_earned: (owner.credits_earned || 0) + Number(s.metadata.referralExtra || 0),
+                                    updated_ts: new Date().toISOString()
                                 },
                                 headers
                             );
@@ -288,12 +350,12 @@ async function handleCheckoutCompleted(s) {
                             await axios.post(
                                 `${process.env.NOCO_API_URL}/${T.owners}`,
                                 {
-                                    owner_email        : ownerEmail,
-                                    total_codes_issued : 0,
-                                    total_redemptions  : 1,
-                                    credits_earned     : Number(s.metadata.referralExtra || 0),
-                                    created_ts         : new Date().toISOString(),
-                                    updated_ts         : new Date().toISOString()
+                                    owner_email: ownerEmail,
+                                    total_codes_issued: 0,
+                                    total_redemptions: 1,
+                                    credits_earned: Number(s.metadata.referralExtra || 0),
+                                    created_ts: new Date().toISOString(),
+                                    updated_ts: new Date().toISOString()
                                 },
                                 headers
                             );
@@ -322,19 +384,19 @@ async function handleCheckoutCompleted(s) {
 
         for (let i = 0; i < missing; i++) {
             await axios.post(`${process.env.NOCO_API_URL}/${T.licenses}`, {
-                license_id            : randomUUID(),
-                purchaser_email       : purchaserEmail,
-                tier                  : tier,
-                status                : 'active',
-                stack_group_id        : stackGroupId,
-                claimed_by_email      : purchaserEmail,
-                notes                 : `session:${s.id}`,
+                license_id: randomUUID(),
+                purchaser_email: purchaserEmail,
+                tier: tier,
+                status: 'active',
+                stack_group_id: stackGroupId,
+                claimed_by_email: purchaserEmail,
+                notes: `session:${s.id}`,
                 email_transfer_history: [
                     {
-                        type      : 'created',
-                        ts        : new Date().toISOString(),
-                        by        : purchaserEmail,
-                        origin    : 'stripe_webhook',
+                        type: 'created',
+                        ts: new Date().toISOString(),
+                        by: purchaserEmail,
+                        origin: 'stripe_webhook',
                         session_id: s.id
                     }
                 ]
@@ -360,53 +422,54 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
     if (event.type === 'checkout.session.completed') {
         const s = event.data.object;
         console.log('💡 Webhook received: checkout.session.completed', s.id, 'evt:', event.id);
-      
+
         const key = s.id;
         if (processedSessions.has(key)) {
-          console.log('↪️ already processed session', key);
-          return res.json({ received: true });
+            console.log('↪️ already processed session', key);
+            return res.json({ received: true });
         }
         if (inflightSessions.has(key)) {
-          console.log('↪️ processing in flight for session', key);
-          return res.json({ received: true });
+            console.log('↪️ processing in flight for session', key);
+            return res.json({ received: true });
         }
-      
+
         const task = (async () => {
-          try {
-            // If this is an installment subscription, create a schedule to auto-cancel after N cycles
-            const installments = parseInt(s.metadata?.installments || '1', 10);
-            if (s.mode === 'subscription' && s.subscription && installments > 1) {
-              try {
-                await stripeClient.subscriptionSchedules.create({
-                    from_subscription: s.subscription,
-                    end_behavior: 'cancel',
-                    phases: [{
-                      items: [{ price: event.data.object.display_items?.[0]?.price?.id || undefined, quantity: 1 }],
-                      iterations: installments
-                    }]
-                  });
-              } catch (e) {
-                console.error('schedule create error', e.message);
-              }
+            try {
+                // If this is an installment subscription, create a schedule to auto-cancel after N cycles
+                const installments = parseInt(s.metadata?.installments || '1', 10);
+if (s.mode === 'subscription' && s.subscription && installments > 1) {
+    try {
+        const sched = await stripeClient.subscriptionSchedules.create({
+            from_subscription: s.subscription,
+            end_behavior: 'cancel'
+        });
+        await stripeClient.subscriptionSchedules.update(sched.id, {
+            phases: [{ iterations: installments }]
+        });
+    } catch (e) {
+        console.error('schedule create error', e.message);
+    }
+}
+
+
+                await handleCheckoutCompleted(s);
+                processedSessions.add(key);
+            } catch (e) {
+                console.error('processing error', e.response?.data || e.message);
+            } finally {
+                inflightSessions.delete(key);
             }
-      
-            await handleCheckoutCompleted(s);
-            processedSessions.add(key);
-          } catch (e) {
-            console.error('processing error', e.response?.data || e.message);
-          } finally {
-            inflightSessions.delete(key);
-          }
         })();
-      
+
         inflightSessions.set(key, task);
     } else if (event.type === 'invoice.paid') {
         const inv = event.data.object;
         console.log('💡 Webhook received: invoice.paid', inv.id, 'sub:', inv.subscription || '');
         try {
-          await awardReferralCreditsForInvoice(inv);
+            await recordInstallmentForInvoice(inv);
+            await awardReferralCreditsForInvoice(inv);
         } catch (e) {
-          console.error('invoice.paid handler error', e.response?.data || e.message);
+            console.error('invoice.paid handler error', e.response?.data || e.message);
         }
     }
 
@@ -421,51 +484,261 @@ app.use(express.json());
 
 app.get('/api/runtime-config', (req, res) => {
     const start = (typeof PRELAUNCH !== 'undefined' && PRELAUNCH instanceof Date)
-      ? PRELAUNCH.toISOString()
-      : (process.env.PRELAUNCH_START || '2025-08-04T00:00:00Z');
+        ? PRELAUNCH.toISOString()
+        : (process.env.PRELAUNCH_START || '2025-08-04T00:00:00Z');
     res.json({ prelaunchStart: start, cfg });
-  });
-    
-  app.get('/control-room/toggles', adminAuth, (req, res) => {
+});
+
+app.get('/control-room/toggles', adminAuth, (req, res) => {
     res.json(cfg);
-  });
-  
-  app.post('/control-room/toggles', adminAuth, (req, res) => {
+});
+
+app.post('/control-room/toggles', adminAuth, (req, res) => {
     const body = req.body || {};
-    cfg.discount_override = Number(body.discount_override) || null;
-    cfg.bonus_override    = Number(body.bonus_override) || null;
-    cfg.hold_drop         = !!body.hold_drop;
-    cfg.banner            = (body.banner || '').toString().slice(0, 280);
+    cfg.discount_override = (body.discount_override === '' || body.discount_override == null) ? null : Number(body.discount_override);
+    cfg.bonus_override = (body.bonus_override === '' || body.bonus_override == null) ? null : Number(body.bonus_override);
+    cfg.hold_drop = !!body.hold_drop;
+    cfg.banner = (body.banner || '').toString().slice(0, 280);
+    cfg.banner_style = (body.banner_style || 'static');
+    cfg.banner_theme = (body.banner_theme || 'info');
+    cfg.banner_speed = Math.max(6, Math.min(60, Number(body.banner_speed || 18)));
+    cfg.banner_dismissible = (body.banner_dismissible !== false);
     res.json({ ok: true, ...cfg });
-  });
-  
-  app.get('/health', (req, res) => res.send('ok'));
-  
+});
+
+app.get('/health', (req, res) => res.send('ok'));
+
 
 app.post('/api/alt-pay-request', async (req, res) => {
-  try {
-    const { tier, referralCode = '', stackCount = 1, installments = 1, email = '', phone = '' } = req.body || {};
-    if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
-    if (!email) return res.status(400).json({ error: 'email_required' });
+    try {
+        const { tier, referralCode = '', stackCount = 1, installments = 1, email = '', phone = '' } = req.body || {};
+        if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
+        if (!email) return res.status(400).json({ error: 'email_required' });
 
-    const ref = 'ALT-' + Math.random().toString(36).slice(2, 10).toUpperCase();
+        const ref = 'ALT-' + Math.random().toString(36).slice(2, 10).toUpperCase();
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+        await axios.post(`${process.env.NOCO_API_URL}/${T.altpay}`, {
+            reference: ref,
+            email,
+            phone,
+            tier,
+            stack_count: Math.max(1, parseInt(stackCount || 1, 10)),
+            installments: Math.max(1, parseInt(installments || 1, 10)),
+            referral_code_entered: referralCode || '',
+            created_ts: new Date().toISOString(),
+            status: 'open'
+        }, headers);
+
+        res.json({ ok: true, reference: ref });
+    } catch (e) {
+        res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
+    }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Referral + Pricing + Checkout APIs
+   These match what your front-end (referral.js, checkout.js) calls.
+──────────────────────────────────────────────────────────────────────────── */
+
+function money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2); }
+function titleTier(t) { return ({ solo: 'Solo', plus: 'Plus', pro: 'Pro', agency: 'Agency' }[t] || t); }
+
+async function fetchCodeRow(code) {
     const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
-    await axios.post(`${process.env.NOCO_API_URL}/${T.altpay}`, {
-      reference: ref,
-      email,
-      phone,
-      tier,
-      stack_count: Math.max(1, parseInt(stackCount || 1, 10)),
-      installments: Math.max(1, parseInt(installments || 1, 10)),
-      referral_code_entered: referralCode || '',
-      created_ts: new Date().toISOString(),
-      status: 'open'
-    }, headers);
+    const url = `${process.env.NOCO_API_URL}/${T.codes}?limit=1&where=(code,eq,${code})`;
+    const { data } = await axios.get(url, headers).catch(() => ({ data: { list: [] } }));
+    return (data.list || [])[0] || null;
+}
 
-    res.json({ ok: true, reference: ref });
-  } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
-  }
+async function hasPurchased(email) {
+    const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+    const url = `${process.env.NOCO_API_URL}/${T.purchases}?limit=1&where=(email,eq,${email})`;
+    const { data } = await axios.get(url, headers).catch(() => ({ data: { list: [] } }));
+    return ((data.list || []).length > 0);
+}
+
+function referralExtraPerUnit(tier, now = new Date()) {
+    const base = BASE_CREDITS[tier] || 0;
+    const bonus = calcBonus(tier, now) || 0;
+    return Math.floor(0.10 * (base + bonus));
+}
+
+/* Generate today’s referral code (1 per day per owner) */
+app.post('/api/referrals/generate', async (req, res) => {
+    try {
+        const ownerEmail = (req.body?.ownerEmail || '').trim().toLowerCase();
+        if (!ownerEmail) return res.status(400).json({ error: 'email_required' });
+        if (!(await hasPurchased(ownerEmail))) return res.status(403).json({ error: 'not_a_customer' });
+
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const ymd = today.toISOString().slice(0, 10);
+
+        // If already issued today and still "issued", reuse it
+        const q = `${process.env.NOCO_API_URL}/${T.codes}?limit=1&where=(owner_email,eq,${ownerEmail})~and(issued_date,eq,${ymd})`;
+        const { data: cd } = await axios.get(q, headers).catch(() => ({ data: { list: [] } }));
+        const existing = (cd.list || [])[0];
+        if (existing && String(existing.status || '').toLowerCase() === 'issued') {
+            return res.json({ code: existing.code });
+        }
+
+        // Generate new code
+        const code = Math.random().toString(36).slice(2, 9).toUpperCase();
+        await axios.post(`${process.env.NOCO_API_URL}/${T.codes}`, {
+            code,
+            owner_email: ownerEmail,
+            status: 'issued',
+            issued_date: ymd
+        }, headers);
+
+        // Upsert owner row counters
+        try {
+            const { data: odata } = await axios.get(
+                `${process.env.NOCO_API_URL}/${T.owners}?limit=1&where=(owner_email,eq,${ownerEmail})`,
+                headers
+            );
+            const row = (odata.list || [])[0];
+            if (row) {
+                await axios.patch(`${process.env.NOCO_API_URL}/${T.owners}/${row.Id || row.id}`, {
+                    total_codes_issued: (row.total_codes_issued || 0) + 1,
+                    updated_ts: new Date().toISOString()
+                }, headers);
+            } else {
+                await axios.post(`${process.env.NOCO_API_URL}/${T.owners}`, {
+                    owner_email: ownerEmail,
+                    total_codes_issued: 1,
+                    total_redemptions: 0,
+                    credits_earned: 0,
+                    created_ts: new Date().toISOString(),
+                    updated_ts: new Date().toISOString()
+                }, headers);
+            }
+        } catch { }
+
+        res.json({ code });
+    } catch (e) {
+        res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
+    }
+});
+
+/* Referral history for an owner */
+app.get('/api/referrals/history', async (req, res) => {
+    try {
+        const ownerEmail = (req.query.email || '').trim().toLowerCase();
+        if (!ownerEmail) return res.status(400).json({ error: 'email_required' });
+
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+
+        // Owner summary
+        const oUrl = `${process.env.NOCO_API_URL}/${T.owners}?limit=1&where=(owner_email,eq,${ownerEmail})`;
+        const { data: odata } = await axios.get(oUrl, headers).catch(() => ({ data: { list: [] } }));
+        const owner = (odata.list || [])[0] || {};
+        const summary = {
+            total_redemptions: owner.total_redemptions || 0,
+            credits_earned: owner.credits_earned || 0
+        };
+
+        // Codes for owner
+        const cUrl = `${process.env.NOCO_API_URL}/${T.codes}?limit=200&where=(owner_email,eq,${ownerEmail})`;
+        const { data: cdata } = await axios.get(cUrl, headers).catch(() => ({ data: { list: [] } }));
+        const codes = (cdata.list || []).map(r => r.code);
+
+        // Redemptions for those codes
+        let redemptions = [];
+        if (codes.length) {
+            const chunk = codes.slice(0, 50).join('|'); // basic in clause via regex OR
+            const rUrl = `${process.env.NOCO_API_URL}/${T.redemptions}?limit=200&where=(code,regex,${chunk})`;
+            const { data: rdata } = await axios.get(rUrl, headers).catch(() => ({ data: { list: [] } }));
+            redemptions = rdata.list || [];
+        }
+
+        res.json({ ...summary, redemptions });
+    } catch (e) {
+        res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
+    }
+});
+
+/* Redeem after purchase (prorate credits on future invoices via webhook) */
+app.post('/api/referrals/redeem-after', async (req, res) => {
+    try {
+        const code = (req.body?.code || '').trim().toUpperCase();
+        const purchaserEmail = (req.body?.purchaserEmail || '').trim().toLowerCase();
+        if (!code || !purchaserEmail) return res.status(400).json({ error: 'required' });
+
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+        const row = await fetchCodeRow(code);
+        if (!row || String(row.status || '').toLowerCase() !== 'issued') {
+            return res.status(400).json({ error: 'invalid_or_used' });
+        }
+
+        // Look up purchaser’s last purchase to compute plan + potential refund % to max 50
+        const pUrl = `${process.env.NOCO_API_URL}/${T.purchases}?limit=1&where=(email,eq,${purchaserEmail})&sort=-CreatedAt`;
+        const { data: pdata } = await axios.get(pUrl, headers).catch(() => ({ data: { list: [] } }));
+        const purchase = (pdata.list || [])[0];
+        if (!purchase) return res.status(404).json({ error: 'no_purchase_found' });
+
+        const tier = purchase.tier;
+        const stack = Math.max(1, parseInt(purchase.stack_count || 1, 10));
+        const extraPerUnit = referralExtraPerUnit(tier);
+        const credit_value = extraPerUnit * stack;
+
+        const discount_refund_due = Math.max(0, 50 - (Number(purchase.discount_percent) || 0)); // % points
+
+        // Record redemption and mark code as used
+        await axios.post(`${process.env.NOCO_API_URL}/${T.redemptions}`, {
+            code,
+            purchaser_email: purchaserEmail,
+            tier_purchased: tier,
+            discount_percent_applied: 50,
+            credit_value,
+            redeemed_ts: new Date().toISOString(),
+            checkout_session_id: purchase.checkout_session_id || '',
+            amount_total_usd: purchase.price_paid || 0,
+            agency_stacked: stack
+        }, headers).catch(() => { });
+
+        try {
+            await axios.patch(`${process.env.NOCO_API_URL}/${T.codes}/${row.Id || row.id}`, {
+                status: 'used',
+                used_by_email: purchaserEmail,
+                used_at: new Date().toISOString()
+            }, headers);
+        } catch { }
+
+        // Owner counters
+        try {
+            const ownerEmail = row.owner_email || '';
+            if (ownerEmail) {
+                const { data: odata } = await axios.get(
+                    `${process.env.NOCO_API_URL}/${T.owners}?limit=1&where=(owner_email,eq,${ownerEmail})`,
+                    headers
+                );
+                const owner = (odata.list || [])[0];
+                if (owner) {
+                    await axios.patch(`${process.env.NOCO_API_URL}/${T.owners}/${owner.Id || owner.id}`, {
+                        total_redemptions: (owner.total_redemptions || 0) + 1,
+                        credits_earned: (owner.credits_earned || 0) + credit_value,
+                        updated_ts: new Date().toISOString()
+                    }, headers);
+                }
+            }
+        } catch { }
+
+        res.json({ ok: true, credit_value, discount_refund_due });
+    } catch (e) {
+        res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
+    }
+});
+
+/* Pricing options used by the plan modal */
+app.post('/api/pricing-options', async (req, res, next) => {
+    return next();
+});
+
+
+/* Create a Stripe Checkout session for the selected plan */
+app.post('/api/create-plan-checkout', async (req, res, next) => {
+    return next();
 });
 
 app.get('/checkout-success', async (req, res) => {
@@ -520,7 +793,7 @@ app.post('/api/referrals/generate', async (req, res) => {
     if (!ownerEmail) return res.status(400).json({ error: 'email_required' });
 
     const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
-    const today   = new Date().toISOString().slice(0, 10);         // YYYY-MM-DD
+    const today = new Date().toISOString().slice(0, 10);         // YYYY-MM-DD
 
     try {
         /* 1) Already issued today? */
@@ -534,12 +807,12 @@ app.post('/api/referrals/generate', async (req, res) => {
             code,
             owner_email: ownerEmail,
             issued_date: today,
-            status     : 'issued'
+            status: 'issued'
         }, headers);
 
         /* 3) Roll-up owner table (creates row if missing) */
         await axios.post(`${process.env.NOCO_API_URL}/rpc/upsert_referral_owner`,   // optional stored proc
-            { email: ownerEmail }, headers).catch(() => {});
+            { email: ownerEmail }, headers).catch(() => { });
 
         return res.json({ code });
     } catch (e) {
@@ -564,7 +837,7 @@ app.post('/api/referrals/redeem-after', async (req, res) => {
 
         // 2) Purchaser must exist
         const { data: purData } = await axios.get(
-            `${process.env.NOCO_API_URL}/${T.purchasers}?limit=1&where=(email,eq,${purchaserEmail})`,
+            `${process.env.NOCO_API_URL}/${T.purchases}?limit=1&where=(email,eq,${purchaserEmail})`,
             headers
         );
         const p = purData.list?.[0];
@@ -591,12 +864,24 @@ app.post('/api/referrals/redeem-after', async (req, res) => {
             agency_stacked: Number(p.stack_count || p.agency_stacked || 1) || 1
         }, headers);
 
-        // 5) Mark code as used
-        await axios.patch(`${process.env.NOCO_API_URL}/${T.codes}/${codeRow.Id || codeRow.id}`, {
-            status: 'used',
-            used_by_email: purchaserEmail,
-            used_at: new Date().toISOString()
-        }, headers);
+        // 5) Enforce max uses and mark code as used if this is the last allowed use
+        const maxUses = codeRow.max_uses ?? 1;
+        const { data: countData } = await axios.get(
+            `${process.env.NOCO_API_URL}/${T.redemptions}?limit=0&where=(code_id,eq,${codeRow.Id || codeRow.id})`,
+            headers
+        );
+        const uses = countData.count || 0;
+        if (maxUses !== null && uses >= maxUses) {
+            return res.status(400).json({ error: 'max_uses_exceeded' });
+        }
+        if (maxUses !== null && uses + 1 >= maxUses) {
+            await axios.patch(`${process.env.NOCO_API_URL}/${T.codes}/${codeRow.Id || codeRow.id}`, {
+                status: 'used',
+                used_by_email: purchaserEmail,
+                used_at: new Date().toISOString()
+            }, headers);
+        }
+
 
         // 6) Update owner rollup (upsert-ish)
         const ownerEmail = codeRow.owner_email || '';
@@ -670,282 +955,283 @@ app.get('/api/referrals/history', async (req, res) => {
 /* Price options (one-time + payment plans) */
 app.post('/api/pricing-options', async (req, res) => {
     try {
-      const { tier, referralCode, stackCount = 1, promoCode } = req.body || {};
-      if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
-  
-      const now = new Date();
-      let discountPct   = calcDiscount(now);
-      let referralValid = false;
-      let refOwnerEmail = '';
-  
-      if (referralCode && referralCode.toUpperCase() === 'SNAP10') {
-        referralValid = true;
-      } else if (referralCode) {
-        try {
-          const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
-          referralValid = !!r.data.valid;
-          refOwnerEmail = r.data.ownerEmail || '';
-        } catch {}
-      }
-      if (referralValid) discountPct = 50;
-  
-      const qty   = Math.max(1, parseInt(stackCount || 1, 10));
-      const base  = BASE_PRICES[tier] * qty;
-      const total = +(base * (1 - discountPct / 100)).toFixed(2);
-  
-      const bonus = calcBonus(tier, now);
-      const referralExtraPerUnit = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
-      const referralExtraTotal   = referralExtraPerUnit * qty;
-  
-      const oneTime = {
-        total,
-        totalFormatted: `$${total.toFixed(2)}`,
-        note: 'Pay once, own for life',
-        feePercent: 0,
-        feeDollars: 0
-      };
-  
-      const installmentsList = [];
-      for (let n = 2; n <= 12; n++) {
-        const percentFeeDollars = +(total * (n / 100)).toFixed(2);
-        const minDollarFee      = 5 * (n - 1);
-        const feeDollars        = Math.max(percentFeeDollars, minDollarFee);
-        const gross             = +(total + feeDollars).toFixed(2);
-        const per               = +(gross / n).toFixed(2);
-  
-        const allowSpecial2 = (total > 50 && total <= 100 && n === 2);
-        if (per >= 40 || allowSpecial2) {
-          const perInstallmentCredits = referralValid ? Math.floor(referralExtraTotal / n) : 0;
-          const feePercentEffective   = +(feeDollars / total).toFixed(4); // 0.1234 = 12.34%
-          installmentsList.push({
-            installments: n,
-            feeDollars,
-            feePercentEffective,
-            perPayment: per,
-            totalWithFee: gross,
-            perPaymentFormatted: `$${per.toFixed(2)}`,
-            totalWithFeeFormatted: `$${gross.toFixed(2)}`,
-            approxCreditsPerPayment: perInstallmentCredits
-          });
+        const { tier, referralCode, stackCount = 1 } = req.body || {};
+        if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
+
+        const now = new Date();
+        let discountPct = calcDiscount(now);
+        let referralValid = false;
+        let refOwnerEmail = '';
+
+        if (referralCode) {
+            try {
+                const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
+                referralValid = !!r.data.valid;
+                refOwnerEmail = r.data.ownerEmail || '';
+            } catch { }
         }
-      }
-  
-      res.json({
-        tier,
-        tierLabel: tier.charAt(0).toUpperCase() + tier.slice(1),
-        stackCount: qty,
-        discountPct,
-        referralValid,
-        referralCode: referralValid ? referralCode : '',
-        bonus,
-        referralExtraPerUnit,
-        referralExtraTotal,
-        oneTime,
-        installments: installmentsList
-      });
+        if (referralValid) discountPct = 50;
+
+        const qty = Math.max(1, parseInt(stackCount || 1, 10));
+        const base = BASE_PRICES[tier] * qty;
+        const total = +(base * (1 - discountPct / 100)).toFixed(2);
+
+        const bonus = calcBonus(tier, now);
+        const perUnitExtra = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
+        const totalExtra = perUnitExtra * qty;
+
+        const oneTime = {
+            total,
+            totalFormatted: `$${total.toFixed(2)}`,
+            note: 'Best value — no plan fee'
+        };
+
+        const installments = [];
+        for (let n = 2; n <= 12; n++) {
+            const feeDollars = +(total * (n / 100)).toFixed(2);           // EXACT N%
+            const gross = +(total + feeDollars).toFixed(2);
+            const per = +(gross / n).toFixed(2);
+
+            const perOK = per >= 40 || (n === 2 && total >= 50 && total <= 100); // $40 min; 2-pay exception
+            if (!perOK) continue;
+
+            installments.push({
+                installments: n,
+                feeDollars,
+                feePercentEffective: +(feeDollars / total).toFixed(4),
+                perPayment: per,
+                totalWithFee: gross,
+                perPaymentFormatted: `$${per.toFixed(2)}`,
+                totalWithFeeFormatted: `$${gross.toFixed(2)}`,
+                approxCreditsPerPayment: referralValid ? Math.floor(totalExtra / n) : 0
+            });
+        }
+
+        res.json({
+            tier,
+            tierLabel: titleTier(tier),
+            stackCount: qty,
+            discountPct,
+            oneTime,
+            installments,
+            referralValid,
+            referralCode: referralValid ? referralCode : '',
+            refOwnerEmail,
+            referralExtraPerUnit: perUnitExtra,
+            referralExtraTotal: totalExtra
+        });
     } catch (e) {
-      res.status(500).json({ error: 'server_error', detail: e.message });
+        res.status(500).json({ error: 'server_error', detail: e.message });
     }
-  });
+});
 
 
-  
-  /* Create Checkout Session (dynamic price; optional referral coupon; optional agency stack) */
-  app.post('/api/create-checkout-session', async (req, res) => {
+
+
+/* Create Checkout Session (dynamic price; optional referral coupon; optional agency stack) */
+app.post('/api/create-checkout-session', async (req, res) => {
     // kept for backward compatibility (one-time path). Prefer /api/create-plan-checkout.
     const { tier, referralCode, stackCount = 1, promoCode } = req.body;
     if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
-  
+
     const now = new Date();
-    let discountPct   = calcDiscount(now);
+    let discountPct = calcDiscount(now);
     let referralValid = false;
     let refOwnerEmail = '';
-  
+
     if (referralCode && referralCode.toUpperCase() === 'SNAP10') {
-      referralValid = true;
+        referralValid = true;
     } else if (referralCode) {
-      try {
-        const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
-        referralValid = !!r.data.valid;
-        refOwnerEmail = r.data.ownerEmail || '';
-      } catch {}
+        try {
+            const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
+            referralValid = !!r.data.valid;
+            refOwnerEmail = r.data.ownerEmail || '';
+        } catch { }
     }
     if (referralValid) discountPct = 50;
-  
+
     const unitAmount = Math.round(BASE_PRICES[tier] * 100 * (1 - discountPct / 100));
-    const bonus      = calcBonus(tier, now);
-    const refExtra   = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
-    const qty        = Math.max(1, parseInt(stackCount || 1, 10));
-  
+    const bonus = calcBonus(tier, now);
+    const refExtra = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
+    const qty = Math.max(1, parseInt(stackCount || 1, 10));
+
     try {
-      const discounts = [];
-      if (promoCode) discounts.push({ promotion_code: promoCode });
-  
-      const session = await stripeClient.checkout.sessions.create({
-        mode: 'payment',
-        line_items: [{
-          quantity: qty,
-          price_data: { currency: 'usd', product: PRODUCT_IDS[tier], unit_amount: unitAmount }
-        }],
-        discounts,
-        allow_promotion_codes: true,
-        metadata: {
-          tier,
-          baseCredits      : BASE_CREDITS[tier],
-          bonusCredits     : bonus,
-          referralExtra    : refExtra,
-          referralCodeUsed : referralValid ? referralCode : '',
-          refOwnerEmail    : referralValid ? refOwnerEmail : '',
-          stack_count      : qty,
-          agency_stacked   : qty,
-          installments     : 1
-        },
-        success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url : `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
-      });
-  
-      res.json({ url: session.url });
-    } catch (err) {
-      console.error('Stripe error:', err);
-      res.status(500).json({ error: 'stripe_error' });
-    }
-  });
-  
-  /* Create either one-time or installment checkout (preferred) */
-  app.post('/api/create-plan-checkout', async (req, res) => {
-    try {
-      const { tier, referralCode, stackCount = 1, installments = 1, promoCode } = req.body || {};
-      if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
-  
-      const now = new Date();
-      let discountPct   = calcDiscount(now);
-      let referralValid = false;
-      let refOwnerEmail = '';
-  
-      if (referralCode && referralCode.toUpperCase() === 'SNAP10') {
-        referralValid = true;
-      } else if (referralCode) {
-        try {
-          const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
-          referralValid = !!r.data.valid;
-          refOwnerEmail = r.data.ownerEmail || '';
-        } catch {}
-      }
-      if (referralValid) discountPct = 50;
-  
-      const qty      = Math.max(1, parseInt(stackCount || 1, 10));
-      const base     = BASE_PRICES[tier] * qty;
-      const total    = +(base * (1 - discountPct / 100)).toFixed(2);
-      const bonus    = calcBonus(tier, now);
-      const refExtra = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
-  
-      if (installments <= 1) {
-        const unitAmount = Math.round(BASE_PRICES[tier] * 100 * (1 - discountPct / 100));
-        const discounts  = [];
+        const discounts = [];
         if (promoCode) discounts.push({ promotion_code: promoCode });
+
         const session = await stripeClient.checkout.sessions.create({
-          mode: 'payment',
-          line_items: [{ quantity: qty, price_data: { currency: 'usd', product: PRODUCT_IDS[tier], unit_amount: unitAmount } }],
-          discounts,
-          allow_promotion_codes: true,
-          metadata: {
-            tier,
-            baseCredits: BASE_CREDITS[tier],
-            bonusCredits: bonus,
-            referralExtra: refExtra,
-            referralCodeUsed: referralValid ? referralCode : '',
-            refOwnerEmail: referralValid ? refOwnerEmail : '',
-            stack_count: qty,
-            agency_stacked: qty,
-            installments: 1,
-            plan_total_cents: Math.round(total * 100),
-            per_payment_cents: Math.round(total * 100)
-          },
-          success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url : `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
+            mode: 'payment',
+            line_items: [{
+                quantity: qty,
+                price_data: { currency: 'usd', product: PRODUCT_IDS[tier], unit_amount: unitAmount }
+            }],
+            discounts,
+            allow_promotion_codes: true,
+            metadata: {
+                tier,
+                baseCredits: BASE_CREDITS[tier],
+                bonusCredits: bonus,
+                referralExtra: refExtra,
+                referralCodeUsed: referralValid ? referralCode : '',
+                refOwnerEmail: referralValid ? refOwnerEmail : '',
+                stack_count: qty,
+                agency_stacked: qty,
+                installments: 1,
+                discountPctUsed: discountPct
+            },
+
+            success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
         });
-        return res.json({ url: session.url });
-      }
-  
-      const percentFeeDollars = +(total * (installments / 100)).toFixed(2);
-      const minDollarFee      = 5 * (installments - 1);
-      const feeDollars        = Math.max(percentFeeDollars, minDollarFee);
-      const gross             = +(total + feeDollars).toFixed(2);
-      const per               = +(gross / installments).toFixed(2);
 
-  
-      const price = await stripeClient.prices.create({
-        currency: 'usd',
-        unit_amount: Math.round(per * 100),
-        recurring: { interval: 'month' },
-        product_data: { name: `SnapLayer LTD – ${tier} – ${installments} payments` }
-      });
-  
-      const session = await stripeClient.checkout.sessions.create({
-        mode: 'subscription',
-        line_items: [{ price: price.id, quantity: 1 }],
-        allow_promotion_codes: false,
-        subscription_data: {
-          metadata: {
-            tier,
-            stack_count: qty,
-            installments,
-            plan_total_cents: Math.round(gross * 100),
-            per_payment_cents: Math.round(per * 100),
-            baseCredits: BASE_CREDITS[tier],
-            bonusCredits: bonus,
-            referralExtra: refExtra,
-            referralCodeUsed: referralValid ? referralCode : '',
-            refOwnerEmail: referralValid ? refOwnerEmail : ''
-          }
-        },
-
-        success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url : `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
-      });
-  
-      res.json({ url: session.url });
+        res.json({ url: session.url });
     } catch (err) {
-      console.error('Stripe plan error:', err);
-      res.status(500).json({ error: 'stripe_error' });
+        console.error('Stripe error:', err);
+        res.status(500).json({ error: 'stripe_error' });
     }
-  });
-  
-  let discountHold = false;
-  let bonusHold = false;
-  let bannerMsg = '';
-  
-  app.post('/control-room/toggles', adminAuth, express.json(), (req, res) => {
+});
+
+/* Create either one-time or installment checkout (preferred) */
+app.post('/api/create-plan-checkout', async (req, res) => {
+    try {
+        const { tier, referralCode, stackCount = 1, installments = 1, promoCode } = req.body || {};
+        if (!PRODUCT_IDS[tier]) return res.status(400).json({ error: 'Unknown tier' });
+
+        const now = new Date();
+        let discountPct = calcDiscount(now);
+        let referralValid = false;
+        let refOwnerEmail = '';
+
+        if (referralCode && referralCode.toUpperCase() === 'SNAP10') {
+            referralValid = true;
+        } else if (referralCode) {
+            try {
+                const r = await axios.post('/api/check-code', { code: referralCode }, { baseURL: 'http://localhost:4242' });
+                referralValid = !!r.data.valid;
+                refOwnerEmail = r.data.ownerEmail || '';
+            } catch { }
+        }
+        if (referralValid) discountPct = 50;
+
+        const qty = Math.max(1, parseInt(stackCount || 1, 10));
+        const base = BASE_PRICES[tier] * qty;
+        const total = +(base * (1 - discountPct / 100)).toFixed(2);
+        const bonus = calcBonus(tier, now);
+        const refExtra = referralValid ? Math.floor((BASE_CREDITS[tier] + bonus) * 0.10) : 0;
+
+        if (installments <= 1) {
+            const unitAmount = Math.round(BASE_PRICES[tier] * 100 * (1 - discountPct / 100));
+            const discounts = [];
+            if (promoCode) discounts.push({ promotion_code: promoCode });
+            const session = await stripeClient.checkout.sessions.create({
+                mode: 'payment',
+                line_items: [{ quantity: qty, price_data: { currency: 'usd', product: PRODUCT_IDS[tier], unit_amount: unitAmount } }],
+                discounts,
+                allow_promotion_codes: true,
+                metadata: {
+                    tier,
+                    baseCredits: BASE_CREDITS[tier],
+                    bonusCredits: bonus,
+                    referralExtra: refExtra,
+                    referralCodeUsed: referralValid ? referralCode : '',
+                    refOwnerEmail: referralValid ? refOwnerEmail : '',
+                    stack_count: qty,
+                    agency_stacked: qty,
+                    installments: 1,
+                    discountPctUsed: discountPct,
+                    plan_total_cents: Math.round(total * 100),
+                    per_payment_cents: Math.round(total * 100)
+                },
+
+                success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
+            });
+            return res.json({ url: session.url });
+        }
+
+        const feePercent = 4 + 2 * (installments - 1);
+        const percentFeeDollars = +(total * (installments / 100)).toFixed(2);
+        const minDollarFee = 5 * (installments - 1);
+        const feeDollars = Math.max(percentFeeDollars, minDollarFee);
+        const gross = +(total + feeDollars).toFixed(2);
+        const per = +(gross / installments).toFixed(2);
+
+        const price = await stripeClient.prices.create({
+            currency: 'usd',
+            unit_amount: Math.round(per * 100),
+            recurring: { interval: 'month' },
+            product_data: { name: `SnapLayer LTD – ${tier} – ${installments} payments` }
+        });
+
+        const session = await stripeClient.checkout.sessions.create({
+            mode: 'subscription',
+            line_items: [{ price: price.id, quantity: 1 }],
+            allow_promotion_codes: false,
+            subscription_data: {
+                metadata: {
+                    tier,
+                    stack_count: qty,
+                    installments,
+                    plan_total_cents: Math.round(total * 100),
+                    plan_fee_cents: Math.round((gross - total) * 100),
+                    plan_gross_cents: Math.round(gross * 100),
+                    per_payment_cents: Math.round(per * 100),
+                    baseCredits: BASE_CREDITS[tier],
+                    bonusCredits: bonus,
+                    referralExtra: refExtra,
+                    referralCodeUsed: referralValid ? referralCode : '',
+                    refOwnerEmail: referralValid ? refOwnerEmail : '',
+                    discountPctUsed: discountPct
+                }
+            },
+
+
+            success_url: `${process.env.APP_BASE || 'http://localhost:4242'}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.APP_BASE || 'http://localhost:4242'}/#plans`
+        });
+
+        res.json({ url: session.url });
+    } catch (err) {
+        console.error('Stripe plan error:', err);
+        res.status(500).json({ error: 'stripe_error' });
+    }
+});
+
+let discountHold = false;
+let bonusHold = false;
+let bannerMsg = '';
+
+app.post('/control-room/toggles', adminAuth, express.json(), (req, res) => {
     const {
-      discount_override = null,
-      bonus_override    = null,
-      hold_drop         = null,
-      banner            = null,
-      banner_style      = null,
-      banner_theme      = null,
-      banner_speed      = null,
-      banner_dismissible= null
+        discount_override = null,
+        bonus_override = null,
+        hold_drop = null,
+        banner = null,
+        banner_style = null,
+        banner_theme = null,
+        banner_speed = null,
+        banner_dismissible = null
     } = req.body || {};
-  
+
     if (discount_override !== null) cfg.discount_override = (discount_override === '' ? null : Number(discount_override));
-    if (bonus_override    !== null) cfg.bonus_override    = (bonus_override === '' ? null : Number(bonus_override));
-    if (hold_drop         !== null) cfg.hold_drop         = !!hold_drop;
-    if (banner            !== null) cfg.banner            = String(banner);
-  
-    if (banner_style      !== null) cfg.banner_style      = String(banner_style || 'static');
-    if (banner_theme      !== null) cfg.banner_theme      = String(banner_theme || 'info');
-    if (banner_speed      !== null) cfg.banner_speed      = Math.max(6, Math.min(60, Number(banner_speed) || 18));
-    if (banner_dismissible!== null) cfg.banner_dismissible= !!banner_dismissible;
-  
+    if (bonus_override !== null) cfg.bonus_override = (bonus_override === '' ? null : Number(bonus_override));
+    if (hold_drop !== null) cfg.hold_drop = !!hold_drop;
+    if (banner !== null) cfg.banner = String(banner);
+
+    if (banner_style !== null) cfg.banner_style = String(banner_style || 'static');
+    if (banner_theme !== null) cfg.banner_theme = String(banner_theme || 'info');
+    if (banner_speed !== null) cfg.banner_speed = Math.max(6, Math.min(60, Number(banner_speed) || 18));
+    if (banner_dismissible !== null) cfg.banner_dismissible = !!banner_dismissible;
+
     res.json(cfg);
-  });
-  
-  
+});
+
+
 app.get('/control-room/toggles', adminAuth, (req, res) => {
     res.json(cfg);
 });
 
 
-  
+
 
 app.listen(4242, () => console.log('✅ Server listening on :4242'));

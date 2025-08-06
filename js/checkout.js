@@ -79,13 +79,17 @@ async function openPlanModal(referral) {
     // Build cards
     const cards = [];
     // One-time
-cards.push({
-    label: 'Pay in full',
-    sub: data.oneTime.note,
-    installments: 1,
-    amount: data.oneTime.totalFormatted,
-    feeNote: ''
-  });
+    cards.push({
+        label: 'Pay in full',
+        sub: data.oneTime.note,
+        installments: 1,
+        amount: data.oneTime.totalFormatted,
+        feeNote: '',
+        creditsNote: (data.referralValid && data.referralExtraTotal)
+          ? `≈ ${Math.round(data.referralExtraTotal)} credits to you and ${Math.round(data.referralExtraTotal)} to the referrer`
+          : ''
+      });
+    
   // Installments
   data.installments.forEach(opt => {
     const pct = Math.round((opt.feePercentEffective || 0) * 100);
