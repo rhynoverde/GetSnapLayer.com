@@ -135,12 +135,22 @@ const START_BONUS = {           // 40 % of BASE_CREDITS
 const PRELAUNCH = new Date('2025-07-27T00:00:00-06:00');
 
 function calcDiscount(now = new Date()) {
+    if (cfg.discount_override != null) return Number(cfg.discount_override);
     const d = Math.floor((now - PRELAUNCH) / 86_400_000);
     const raw = 60 - d;
-    return Math.max(50, raw);
+    const autoVal = Math.max(50, raw);
+    if (cfg.hold_drop) {
+        if (lastAutoDiscount != null) return lastAutoDiscount;
+    }
+    lastAutoDiscount = autoVal;
+    return autoVal;
 }
+
 function calcBonus(tier, now = new Date()) {
-    if (cfg.bonus_override != null) return cfg.bonus_override;
+    if (cfg.bonus_override != null) {
+        const pct = Math.max(0, Number(cfg.bonus_override));
+        return Math.round((BASE_CREDITS[tier] || 0) * (pct / 100));
+    }
 
     const d = Math.floor((now - PRELAUNCH) / 86_400_000);
     const drop = Math.round(START_BONUS[tier] * 0.02 * d);
@@ -174,12 +184,14 @@ const cfg = {
     discount_override: null,
     bonus_override: null,
     hold_drop: false,
+    rollover_months: 6,
     banner: '',
     banner_style: 'static',     // 'static' | 'scroll'
     banner_theme: 'info',       // 'info' | 'warning' | 'success' | 'danger'
     banner_speed: 18,           // seconds for scroll
     banner_dismissible: true
 };
+
 
 let lastAutoDiscount = null;
 let lastAutoBonus = {};
@@ -437,19 +449,19 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
             try {
                 // If this is an installment subscription, create a schedule to auto-cancel after N cycles
                 const installments = parseInt(s.metadata?.installments || '1', 10);
-if (s.mode === 'subscription' && s.subscription && installments > 1) {
-    try {
-        const sched = await stripeClient.subscriptionSchedules.create({
-            from_subscription: s.subscription,
-            end_behavior: 'cancel'
-        });
-        await stripeClient.subscriptionSchedules.update(sched.id, {
-            phases: [{ iterations: installments }]
-        });
-    } catch (e) {
-        console.error('schedule create error', e.message);
-    }
-}
+                if (s.mode === 'subscription' && s.subscription && installments > 1) {
+                    try {
+                        const sched = await stripeClient.subscriptionSchedules.create({
+                            from_subscription: s.subscription,
+                            end_behavior: 'cancel'
+                        });
+                        await stripeClient.subscriptionSchedules.update(sched.id, {
+                            phases: [{ iterations: installments }]
+                        });
+                    } catch (e) {
+                        console.error('schedule create error', e.message);
+                    }
+                }
 
 
                 await handleCheckoutCompleted(s);
@@ -498,6 +510,7 @@ app.post('/control-room/toggles', adminAuth, (req, res) => {
     cfg.discount_override = (body.discount_override === '' || body.discount_override == null) ? null : Number(body.discount_override);
     cfg.bonus_override = (body.bonus_override === '' || body.bonus_override == null) ? null : Number(body.bonus_override);
     cfg.hold_drop = !!body.hold_drop;
+    cfg.rollover_months = Math.max(1, Math.round(Number(body.rollover_months || cfg.rollover_months || 6)));
     cfg.banner = (body.banner || '').toString().slice(0, 280);
     cfg.banner_style = (body.banner_style || 'static');
     cfg.banner_theme = (body.banner_theme || 'info');
@@ -745,32 +758,302 @@ app.get('/checkout-success', async (req, res) => {
     const sessionId = req.query.session_id || '';
     let email = '';
     let amount = '';
-    let currency = '';
-
+    let currency = 'USD';
+  
+    let tier = '';
+    let stack = 1;
+    let installments = 1;
+  
+    let planTotal = 0;     // one-time total before plan fee
+    let planFee = 0;       // added fee for payment plans
+    let planGross = 0;     // total with plan fee
+    let perPayment = 0;    // amount per installment
+    let discountPct = 0;
+  
+    let baseCredits = 0;
+    let bonusCredits = 0;
+    let referralCredits = 0;
+  
+    let createdAt = new Date();
+  
     try {
-        if (sessionId) {
-            const s = await stripeClient.checkout.sessions.retrieve(sessionId);
-            email = s.customer_details?.email || '';
-            amount = ((s.amount_total || 0) / 100).toFixed(2);
-            currency = (s.currency || 'usd').toUpperCase();
+      if (sessionId) {
+        const s = await stripeClient.checkout.sessions.retrieve(sessionId);
+        email = s.customer_details?.email || '';
+        amount = ((s.amount_total || 0) / 100).toFixed(2);
+        currency = (s.currency || 'usd').toUpperCase();
+        createdAt = new Date((s.created || Math.floor(Date.now() / 1000)) * 1000);
+  
+        let md = s.metadata || {};
+        if (s.subscription) {
+          try {
+            const sub = await stripeClient.subscriptions.retrieve(s.subscription);
+            md = sub.metadata || md;
+          } catch {}
         }
+  
+        tier = String(md.tier || '').toLowerCase();
+        stack = Math.max(1, parseInt(md.stack_count || md.agency_stacked || '1', 10));
+        installments = Math.max(1, parseInt(md.installments || '1', 10));
+  
+        planTotal = Number(md.plan_total_cents || 0) / 100;
+        planFee   = Number(md.plan_fee_cents || 0) / 100;
+        planGross = Number(md.plan_gross_cents || 0) / 100;
+        perPayment = Number(md.per_payment_cents || 0) / 100;
+  
+        const basePerUnitCredits = Number(md.baseCredits || (BASE_CREDITS[tier] || 0));
+        const bonusPerUnit = Number(md.bonusCredits || 0);
+        const refExtraPerUnit = Number(md.referralExtra || 0);
+  
+        baseCredits = basePerUnitCredits * stack;
+        bonusCredits = bonusPerUnit * stack;
+        referralCredits = refExtraPerUnit * stack;
+  
+        const baseNoDiscTotal = (BASE_PRICES[tier] || 0) * stack;
+        discountPct = Number(md.discountPctUsed || 0) || (baseNoDiscTotal ? Math.max(0, Math.round((1 - (planTotal || ((s.amount_total || 0) / 100)) / baseNoDiscTotal) * 100)) : 0);
+  
+        if (!planTotal && baseNoDiscTotal) {
+          planTotal = +(((s.amount_total || 0) / 100)).toFixed(2);
+        }
+        if (!planGross) planGross = +(planTotal + planFee).toFixed(2);
+        if (!perPayment && installments > 1) perPayment = +(planGross / installments).toFixed(2);
+      }
     } catch (e) {
-        console.error('retrieve session error', e.message);
+      console.error('retrieve session error', e.message);
     }
+  
+    const label = (t => ({ solo: 'SOLO', plus: 'PLUS', pro: 'PRO', agency: 'AGENCY' }[t] || t.toUpperCase()))(tier);
+    const payDay = createdAt.getDate();
+  
+    const _fmt = new Intl.NumberFormat('en-US',{style:'currency',currency});
+    const _feeDollars = Math.max(0, (planGross || 0) - (planTotal || 0));
+    const _feePct = planTotal ? Math.round((_feeDollars / planTotal) * 100) : 0;
+    const oneLinePrice = installments > 1
+        ? `${_fmt.format(planTotal)} + ${_feePct}% plan fee of ${_fmt.format(_feeDollars)} = ${_fmt.format(planGross)}`
+        : `${_fmt.format(planTotal)}`;
+  
+    const paymentsLine = installments > 1
+      ? `${installments} payments of ${new Intl.NumberFormat('en-US',{style:'currency',currency}).format(perPayment)} (charged each month around the ${payDay}th)`
+      : `Paid in full today`;
+  
+      const _nf = new Intl.NumberFormat('en-US');
+      const creditsLine = `${_nf.format(baseCredits)} Credits + ${_nf.format(bonusCredits)} PreLaunch Bonus Credits${referralCredits ? ` + ${_nf.format(referralCredits)} Referral Credits` : ''} = ${_nf.format(baseCredits + bonusCredits + referralCredits)} Total Credits`;
+        
+    let suggestedUsername = (() => {
+        const base = (email || '').split('@')[0];
+        return (base || 'user').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,24);
+      })();
+      try {
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
 
-    res.set('Content-Type', 'text/html');
-    res.send(
-        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Thank you</title><meta name="viewport" content="width=device-width, initial-scale=1">' +
-        '<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0b1b39;color:#fff;padding:2rem}' +
-        '.card{max-width:680px;margin:0 auto;background:#0f2a5a;border:1px solid #1f3b7b;border-radius:12px;padding:24px}' +
-        '.btn{display:inline-block;margin-top:12px;padding:10px 16px;background:#ec4899;color:#fff;border-radius:8px;text-decoration:none}</style>' +
-        '</head><body><div class="card"><h1>Thanks for your purchase!</h1>' +
-        (email ? '<p>Receipt email: <strong>' + email + '</strong></p>' : '') +
-        (amount ? '<p>Amount: <strong>' + amount + ' ' + currency + '</strong></p>' : '') +
-        '<p>We’re finalizing your license. You can close this tab.</p>' +
-        '<a class="btn" href="/">Back to site</a></div></body></html>'
-    );
-});
+        // 1) Do we already have a user for this email?
+        let existingUser = null;
+        try {
+          const { data: uByEmail } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(email,eq,${email})`, headers);
+          existingUser = (uByEmail.list || [])[0] || null;
+        } catch {}
+
+        if (existingUser && (existingUser.username || '').trim()) {
+          // Use their saved username as-is.
+          suggestedUsername = existingUser.username.trim();
+        } else {
+          // Propose from email local-part; ensure uniqueness.
+          let candidate = suggestedUsername;
+          let needsSuffix = false;
+          try {
+            const { data: uByName } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(username,eq,${candidate})`, headers);
+            needsSuffix = !!(uByName.list && uByName.list[0] && (uByName.list[0].email || '').toLowerCase() !== (email || '').toLowerCase());
+          } catch {}
+          if (needsSuffix) {
+            const suffix = Math.random().toString(36).slice(2,6);
+            candidate = `${candidate}-${suffix}`;
+          }
+          suggestedUsername = candidate;
+
+          // Persist now: update existing user (no username) or create new user.
+          try {
+            if (existingUser) {
+              await axios.patch(`${process.env.NOCO_API_URL}/${T.users}/${existingUser.Id || existingUser.id}`, {
+                username: suggestedUsername, updated_ts: new Date().toISOString()
+              }, headers);
+            } else {
+              await axios.post(`${process.env.NOCO_API_URL}/${T.users}`, {
+                email, username: suggestedUsername, created_ts: new Date().toISOString()
+              }, headers);
+            }
+          } catch {}
+        }
+      } catch {}
+
+  
+      let shareImg = '';
+      try {
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+        const today = new Date().toISOString().slice(0,10);
+        let code = '';
+        const q = `${process.env.NOCO_API_URL}/${T.codes}?limit=1&where=(owner_email,eq,${email})~and(issued_date,eq,${today})`;
+        const { data: existing } = await axios.get(q, headers);
+        if (existing.list?.[0]?.code) {
+          code = existing.list[0].code;
+        } else {
+          code = Math.random().toString(36).slice(2,9).toUpperCase();
+          await axios.post(`${process.env.NOCO_API_URL}/${T.codes}`, {
+            code,
+            owner_email: email,
+            issued_date: today,
+            status: 'issued'
+          }, headers);
+        }
+        shareImg = `https://my.reviewshare.pics/i/uvfZfFhwv.png?custom_text_1=${encodeURIComponent(code)}`;
+      } catch {}
+      res.set('Content-Type', 'text/html');
+          res.send(`<!DOCTYPE html>
+  <html>
+  <head>
+  <meta charset="utf-8">
+  <title>Thank you</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --pink:#ec4899; --bg:#0b1b39; --card:#0f2a5a; --border:#1f3b7b; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:#fff;padding:24px}
+    .card{max-width:840px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px}
+    h1{margin:0 0 8px 0}
+    .muted{color:#bcd3ff}
+    .grid{display:grid;gap:16px}
+    .two{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .pill{display:inline-block;background:#10306b;border:1px solid #2a4a8e;border-radius:999px;padding:6px 10px;font-size:12px}
+    .btn{display:inline-block;margin-top:12px;padding:10px 16px;background:var(--pink);color:#fff;border-radius:8px;text-decoration:none}
+    .btn-row{display:flex;gap:8px;flex-wrap:wrap}
+    .input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #2a4a8e;background:#091737;color:#fff}
+    .label{font-size:12px;margin:8px 0 6px 0;color:#cfe0ff}
+    .small{font-size:12px;color:#c7d6ff}
+    .box{background:#0c2250;border:1px dashed #335bab;border-radius:12px;padding:14px;text-align:center;color:#c7d6ff}
+  </style>
+  </head>
+  <body>
+    <div class="card">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+    <img src="/images/snaplayer-logo-on-blue-1024x1024.jpg" alt="SnapLayer" style="height:56px;width:56px;border-radius:12px">
+    <span style="font-weight:800;font-size:18px;color:#dfe9ff">SnapLayer</span>
+  </div>
+      <h1>Thanks for your purchase!</h1>
+      ${email ? `<p>Receipt email: <strong>${email}</strong></p>` : ``}
+      ${amount ? `<p>Amount: <strong>${amount} ${currency}</strong></p>` : ``}
+  
+      <div class="grid two" style="margin-top:16px">
+        <div>
+          <div class="pill">${label} Plan – ${stack} License Stack</div>
+          <p style="margin:12px 0 0 0;font-size:20px"><strong>${oneLinePrice}</strong></p>
+          <p class="muted" style="margin:6px 0 0 0">${paymentsLine}${discountPct ? ` • ${discountPct}% discount applied` : ``}</p>
+          <p style="margin:12px 0 0 0">${creditsLine}</p>
+  
+          <div class="box" style="margin-top:14px;text-align:left">
+            <strong>Payment plan terms</strong>
+            <p class="small" style="margin-top:6px">
+              If a payment plan payment fails and isn’t resolved within 30 days, your account will be reduced to the largest tier/stack fully covered by the payments received (minus the plan’s added percentage) until you catch up. By proceeding, you agree to these terms.
+            </p>
+          </div>
+        </div>
+  
+        <div>
+          <div class="label">Your username</div>
+          <input id="u-name" class="input" value="${suggestedUsername}">
+          <div class="label">Text me important updates (optional)</div>
+          <input id="u-phone" class="input" placeholder="Your mobile number">
+          <label class="label" style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <input id="u-opt" type="checkbox" checked>
+            <span>Yes, email me updates, specials and promotions.</span>
+          </label>
+          <div class="btn-row">
+            <a id="save-profile" class="btn" href="#">Save my preferences</a>
+            <a class="btn" href="/">Back to site</a>
+          </div>
+          <div id="save-msg" class="small" style="margin-top:8px"></div>
+        </div>
+      </div>
+  
+      <hr style="border:none;border-top:1px solid #1f3b7b;margin:20px 0">
+  
+      <h3 style="margin:0 0 8px 0">Share & earn bonus credits</h3>
+      <p class="small">We’ve got images you can use to share the SnapLayer PreLaunch and your referral code. Placeholders for now—assets coming soon.</p>
+      <div class="grid two" style="margin-top:8px">
+  <a class="box" href="${shareImg}" target="_blank" style="display:block">
+    <img src="${shareImg}" alt="Your share image" style="max-width:100%;border-radius:10px">
+  </a>
+</div>
+
+    </div>
+  
+  <script>
+    (function(){
+      const btn = document.getElementById('save-profile');
+      const msg = document.getElementById('save-msg');
+      btn?.addEventListener('click', async function(e){
+        e.preventDefault();
+        msg.textContent = 'Saving...';
+        try {
+          const r = await fetch('/api/finish-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: ${JSON.stringify(email)},
+              username: document.getElementById('u-name')?.value || '',
+              phone: document.getElementById('u-phone')?.value || '',
+              optin: !!document.getElementById('u-opt')?.checked
+            })
+          });
+          const d = await r.json();
+          msg.textContent = d && d.ok ? 'Saved. Thank you!' : 'Could not save right now.';
+        } catch {
+          msg.textContent = 'Could not save right now.';
+        }
+      });
+    })();
+  </script>
+  </body>
+  </html>`);
+  });
+  
+  app.post('/api/finish-profile', express.json(), async (req, res) => {
+    try {
+      const { email = '', username = '', phone = '', optin = false } = req.body || {};
+      if (!email) return res.status(400).json({ error: 'email_required' });
+  
+      const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+  
+      let finalUsername = (username || (email.split('@')[0] || 'user'))
+        .toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,24);
+      try {
+        const q = `${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(username,eq,${finalUsername})`;
+        const { data: chk } = await axios.get(q, headers);
+        if (chk.list?.[0] && (chk.list[0].email || '').toLowerCase() !== email.toLowerCase()) {
+          finalUsername = `${finalUsername}-${Math.random().toString(36).slice(2,6)}`;
+        }
+      } catch {}
+  
+      let uid = null;
+  
+      try {
+        const { data: u1 } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(email,eq,${email})`, headers);
+        if (u1.list?.[0]) uid = u1.list[0].Id || u1.list[0].id;
+      } catch {}
+  
+      if (uid) {
+        await axios.patch(`${process.env.NOCO_API_URL}/${T.users}/${uid}`, {
+            username: finalUsername, phone, marketing_opt_in: !!optin, updated_ts: new Date().toISOString()
+          }, headers).catch(() => {});         
+      } else {
+        await axios.post(`${process.env.NOCO_API_URL}/${T.users}`, {
+            email, username: finalUsername, phone, marketing_opt_in: !!optin, created_ts: new Date().toISOString()
+          }, headers).catch(() => {});
+      }
+  
+      res.json({ ok: true, username: finalUsername });
+    } catch (e) {
+      res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
+    }
+  });
+  
 
 /* Validate a referral code is unused & return owner email */
 app.post('/api/check-code', async (req, res) => {
@@ -1014,12 +1297,15 @@ app.post('/api/pricing-options', async (req, res) => {
             discountPct,
             oneTime,
             installments,
+            baseCredits: BASE_CREDITS[tier],
+            bonusCredits: bonus,
             referralValid,
             referralCode: referralValid ? referralCode : '',
             refOwnerEmail,
             referralExtraPerUnit: perUnitExtra,
             referralExtraTotal: totalExtra
         });
+
     } catch (e) {
         res.status(500).json({ error: 'server_error', detail: e.message });
     }
@@ -1206,6 +1492,7 @@ app.post('/control-room/toggles', adminAuth, express.json(), (req, res) => {
         discount_override = null,
         bonus_override = null,
         hold_drop = null,
+        rollover_months = null,
         banner = null,
         banner_style = null,
         banner_theme = null,
@@ -1216,6 +1503,7 @@ app.post('/control-room/toggles', adminAuth, express.json(), (req, res) => {
     if (discount_override !== null) cfg.discount_override = (discount_override === '' ? null : Number(discount_override));
     if (bonus_override !== null) cfg.bonus_override = (bonus_override === '' ? null : Number(bonus_override));
     if (hold_drop !== null) cfg.hold_drop = !!hold_drop;
+    if (rollover_months !== null) cfg.rollover_months = Math.max(1, Math.min(24, Number(rollover_months) || 6));
     if (banner !== null) cfg.banner = String(banner);
 
     if (banner_style !== null) cfg.banner_style = String(banner_style || 'static');
@@ -1225,6 +1513,7 @@ app.post('/control-room/toggles', adminAuth, express.json(), (req, res) => {
 
     res.json(cfg);
 });
+
 
 
 app.get('/control-room/toggles', adminAuth, (req, res) => {

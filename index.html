@@ -72,10 +72,13 @@
     }
 
     #snaplayer-logo.logo-small {
-      transform: scale(1) translateY(0);
-      border-radius: 0.375rem;
-      box-shadow: none;
-    }
+  transform: scale(1) translateY(0);
+  border-radius: 0.375rem;
+  box-shadow: none;
+}
+#snaplayer-logo.logo-large + span { margin-left: 6rem; }
+#snaplayer-logo.logo-small + span { margin-left: .5rem; }
+
 
 
     /* Timer effects */
@@ -422,7 +425,7 @@
   <header class="bg-blue-950 border-b border-blue-800 sticky top-0 z-50">
     <div class="container mx-auto flex items-center py-4 px-4">
       <div class="flex items-center space-x-2">
-        <img src="images/SnapLayer-Logo-whiteBlue.png" alt="SnapLayer logo" id="snaplayer-logo" class="logo-large">
+        <img src="/images/snaplayer-logo-on-blue-1024x1024.jpg" alt="SnapLayer logo" id="snaplayer-logo" class="logo-large">
         <span class="font-bold text-xl">SnapLayer</span>
       </div>
 
@@ -479,8 +482,7 @@
     </div>
 
     <a href="#plans"
-      class="bg-pink-500 hover:bg-pink-600 text-white px-10 py-5 rounded-full text-2xl font-semibold transition-colors">Get
-      SnapLayer PreLaunch Discount and Extra Limits</a>
+      class="inline-block bg-pink-500 hover:bg-pink-600 text-white px-10 py-5 rounded-full text-2xl font-semibold transition-colors text-center whitespace-normal break-words leading-snug">Get SnapLayer PreLaunch Discount and Extra Limits</a>
   </section>
 
 
@@ -634,7 +636,7 @@
             <li>Up to 50 rows per SnapSheet</li>
             <li><span class="plan-base" data-tier="solo">250</span> images/month + <span class="plan-bonus"
                 data-tier="solo"></span> bonus credits now</li>
-            <li class="text-xs text-blue-300">Bonus starts at 200 and drops 4/day (2%) until it reaches 0 by day 50.
+                <li class="text-xs text-blue-300"></li>
             </li>
             <li>SnapLinks</li>
             <li>No API / SnapPages / PSD import</li>
@@ -676,7 +678,8 @@
             <li>15 text + 10 image fields per template</li>
             <li>Up to 1,000 rows per SnapSheet</li>
             <li><span class="plan-base" data-tier="pro">5000</span> images/month + <span class="plan-bonus"
-                data-tier="pro"></span> bonus credits now</li>
+              data-tier="solo"></span> bonus credits now</li>
+            <li><span class="rollover-months"></span> month credit rollover</li>
             <li>Unlimited SnapPages</li>
             <li>10 subaccounts</li>
             <li>White‑label + API access</li>
@@ -803,96 +806,124 @@
   <div id="explosion-overlay"></div>
 
   <!-- Referral Code Modal -->
-  <div id="referral-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
-    <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-md">
-      <h3 class="text-2xl font-bold mb-3 text-center">Enter a referral code (optional)</h3>
-      <p class="text-sm text-blue-200 mb-4 text-center">
-        Don’t have one? No worries — referral codes can be entered <strong>after purchase</strong> and all benefits will
-        be applied to your account.
-        We’ll send tips on finding a code once your purchase is complete.
-      </p>
-      <input id="referral-code-input" type="text" placeholder="Referral code"
-        class="w-full p-3 mb-4 rounded-md text-black">
-      <div id="stack-count-wrap" class="hidden mb-4">
+  <div id="referral-modal" class="fixed inset-0 z-40 hidden bg-black/60 flex items-center justify-center p-4">
+    <div class="bg-blue-900 text-white rounded-xl shadow-xl max-w-xl w-full p-6 border border-blue-700">
+      <div class="text-center">
+        <div class="text-3xl font-extrabold"><span id="ref-plan-tier"></span> Plan</div>
+        <div id="ref-plan-price" class="text-xl font-semibold mt-1 mb-4"></div>        
+      </div>
+
+      <div id="stack-count-wrap" class="mb-4">
         <label for="stack-count" class="block text-sm mb-1">How many licenses do you want to stack for this
           plan?</label>
-        <select id="stack-count" class="w-full p-3 rounded-md text-black">
-          <option value="1">1 (no stack)</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-          <option value="9">9</option>
-          <option value="10">10</option>
-          <option value="11">11</option>
-          <option value="12">12</option>
-          <option value="13">13</option>
-          <option value="14">14</option>
-          <option value="15">15</option>
-          <option value="16">16</option>
-          <option value="17">17</option>
-          <option value="18">18</option>
-          <option value="19">19</option>
-          <option value="20">20</option>
-          <option value="21">21</option>
-          <option value="22">22</option>
-          <option value="23">23</option>
-          <option value="24">24</option>
-          <option value="25">25</option>
-          <option value="26">26</option>
-          <option value="27">27</option>
-          <option value="28">28</option>
-          <option value="29">29</option>
-          <option value="30">30</option>
+        <select id="stack-count" class="w-full px-3 py-2 rounded-md text-black">
+          <option>1</option>
+          <option>2</option>
+          <option>3</option>
+          <option>4</option>
+          <option>5</option>
+          <option>6</option>
+          <option>7</option>
+          <option>8</option>
+          <option>9</option>
+          <option>10</option>
         </select>
-
-        <p class="text-xs text-blue-300 mt-2">You can keep stacking during prelaunch. New stacks use that day’s discount
-          & bonuses.</p>
       </div>
-      <div class="flex flex-col-reverse sm:flex-row justify-end gap-3">
-        <button id="referral-skip" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">
-          Proceed without Code, I Will Add One Later
-        </button>
-        <button id="referral-continue" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">
-          Code Entered, Continue to Checkout
-        </button>
+
+      <div id="ref-credits-line" class="mt-3 mb-6 text-sm text-blue-200"></div>
+
+<label class="block text-sm mb-1">Referral Code (Optional)</label>
+<input id="referral-code-input" type="text" placeholder="Referral code" class="w-full px-4 py-2 rounded-md text-black">
+<div class="mt-2 text-sm">
+  <span id="referral-status"></span>
+  <button id="referral-info" type="button" class="underline text-blue-200 inline-flex items-center gap-1 ml-2">info<span class="inline-block w-4 h-4 rounded-full border border-blue-200 text-[10px] leading-4 text-center">i</span></button>
+</div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+        <button id="ref-pay-card" class="bg-pink-500 hover:bg-pink-600 py-3 rounded-md text-white">Pay total with
+          Card</button>
+        <button id="ref-plan-options" class="bg-blue-700 hover:bg-blue-600 py-3 rounded-md text-white">Payment Plan
+          Options</button>
+        <button id="ref-alt-pay" class="bg-gray-600 hover:bg-gray-700 py-3 rounded-md text-white">Alternate Pay
+          Options</button>
       </div>
     </div>
   </div>
 
   <!-- Pricing & Payment Plans Modal -->
   <div id="plan-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden">
-    <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-2xl">
-      <h3 class="text-2xl font-bold mb-2 text-center">Choose how you want to pay</h3>
-      <p id="plan-summary" class="text-sm text-blue-200 mb-4 text-center"></p>
+    <div class="bg-blue-900 p-6 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      <h3 class="text-2xl font-bold mb-2 text-center">Choose your payment plan</h3>
+<p id="plan-summary" class="text-sm text-blue-200 mb-4 text-center"></p>
 
-      <div id="plan-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4"></div>
-      <p class="text-xs text-blue-300 mb-2">Minimum plan fee is $5 per extra payment. Otherwise the fee is n% of today’s
-        price (n = number of payments). The higher applies.</p>
+<div id="plan-grid" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
 
-      <div class="bg-blue-800/60 rounded-md p-3 mb-4">
-        <p class="text-xs text-blue-100">
-          If a payment plan payment fails and isn’t resolved within 30 days, your account will be reduced to the
-          largest tier/stack fully covered by the payments received (minus the plan’s added percentage) until you
-          catch up. By proceeding, you agree to these terms.
-        </p>
-      </div>
-
+<div class="bg-blue-800/60 rounded-md p-3 mb-4">
+  <p class="text-xs text-blue-100">
+    If a payment plan payment fails and isn’t resolved within 30 days, your account will be reduced to the largest tier/stack fully covered by the payments received (minus the plan’s added percentage) until you catch up. By proceeding, you agree to these terms.
+  </p>
+</div>
+  
       <div class="flex flex-col sm:flex-row justify-end gap-3">
-        <button id="plan-other" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">Pay another
-          way</button>
-        <button id="plan-pay" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">Pay with
-          card</button>
+        <button id="plan-other" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-md">Pay another way</button>
+        <button id="plan-pay" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-md">Pay with card</button>
         <button id="plan-cancel" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-md">Back</button>
       </div>
     </div>
   </div>
+  
 
+  <div id="altpay-modal" class="fixed inset-0 z-40 hidden bg-black/60 flex items-center justify-center p-4">
+    <div class="bg-blue-900 text-white rounded-xl shadow-xl max-w-3xl w-full p-6 border border-blue-700">
+      <h3 class="text-2xl font-bold mb-3 text-center">Alternate Pay Options</h3>
+      <div class="space-y-3 text-sm text-blue-100">
+        <p>We prefer card payments through Stripe if possible (and this includes other Stripe connected options like
+          CashApp, Klarna, Link, Amazon Pay.)</p>
+        <p>If you would like to pay with Wise, PayPal, Venmo, Zelle, or any other method, select your method below. The
+          system will generate an image (“I want to buy SnapLayer PreLaunch! My chosen plan code is [Code].”). Join the
+          SnapLayer Facebook group and post that image. We will DM you an invoice and payment instructions for your
+          chosen plan and payment method.</p>
+        <p>If you do not use Facebook, email us the image at Sales@GetSnapLayer.com. We prefer the Facebook Group
+          method.</p>
+        <p>We typically do not do payment plans on custom payment methods. If you would like to do payments, please use
+          the card payment method.</p>
+        <p>If you are using an alternate payment method but want to stack/do payments, remember you can stack more codes
+          later throughout PreLaunch, BetaLaunch and Launch. Credits can be stacked to any plan you have purchased.</p>
+      </div>
 
+      <div class="mt-4">
+        <label for="alt-method" class="block text-sm mb-1">Select a payment method</label>
+        <div class="flex items-center gap-4 mb-3">
+  <div class="flex items-center gap-2 bg-white/10 px-3 py-2 rounded">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" class="text-white"><path d="M7.5 3h8a4.5 4.5 0 0 1 0 9H13l-.7 4.2a2.5 2.5 0 0 1-2.5 2.1H6.1a.9.9 0 0 1-.9-1.1L7.5 3Z"/></svg>
+    <span class="text-sm">PayPal</span>
+  </div>
+  <div class="flex items-center gap-2 bg-white/10 px-3 py-2 rounded">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" class="text-white"><path d="M4 4h8.5a7.5 7.5 0 1 1 0 15H11l-1.5 3H6.2L8 13h4.5a3.5 3.5 0 0 0 0-7H8.8L9.6 4H4Z"/></svg>
+    <span class="text-sm">Wise</span>
+  </div>
+</div>
 
+<select id="alt-method" class="w-full px-3 py-2 rounded-md text-black">
+  <option value="paypal">PayPal</option>
+  <option value="wise">Wise</option>
+  <option value="other">Other</option>
+</select>
+<input id="alt-other-method" type="text" placeholder="How would you like to pay?" class="w-full px-3 py-2 rounded-md text-black mt-3 hidden">
+<input id="alt-email" type="email" placeholder="Your email" class="w-full px-3 py-2 rounded-md text-black mt-3">
+<input id="alt-phone" type="text" placeholder="Phone (optional)" class="w-full px-3 py-2 rounded-md text-black mt-2">
+
+      </div>
+
+      <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button id="alt-submit" class="bg-blue-700 hover:bg-blue-600 py-3 rounded-md text-white">Generate
+          Request</button>
+        <button id="alt-back" class="bg-gray-600 hover:bg-gray-700 py-3 rounded-md text-white">I want to pay on a plan,
+          I'll pay with card</button>
+      </div>
+      <div id="alt-note" class="mt-3 text-xs text-blue-200 text-center"></div>
+    </div>
+  </div>
 
   <button id="dev-show"
     class="fixed bottom-6 left-6 z-40 hidden bg-blue-700 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded">Show

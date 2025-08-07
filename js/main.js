@@ -66,21 +66,23 @@ function updatePricing() {
 }
 
 function updatePlanBonuses() {
+  const cfg = window.__RUNTIME_CFG__ || {};
   const base = { solo: 250, plus: 1000, pro: 5000, agency: 10000 };
-  const startBonus = {           // 40% of each tier’s base credits
-    solo  : 100,
-    plus  : 400,
-    pro   : 2000,
-    agency: 4000
-  };
+  const startBonus = { solo: 100, plus: 400, pro: 2000, agency: 4000 }; // 40% of base
+
   const now = new Date();
-  const daysElapsed = Math.max(0, Math.floor((now - prelaunchStart) / 86400000)); // Day 0-based
+  const daysElapsed = Math.max(0, Math.floor((now - prelaunchStart) / 86400000));
   const currentBonus = {};
-  Object.keys(startBonus).forEach(tier => {
-    const start = startBonus[tier];
-    const drop = Math.round(start * 0.02 * daysElapsed); // 2% of starting bonus per day
-    currentBonus[tier] = Math.max(0, start - drop);
-  });
+
+  if (cfg.bonus_override != null) {
+    Object.keys(startBonus).forEach(tier => { currentBonus[tier] = Number(cfg.bonus_override); });
+  } else {
+    Object.keys(startBonus).forEach(tier => {
+      const start = startBonus[tier];
+      const drop = Math.round(start * 0.02 * daysElapsed);
+      currentBonus[tier] = Math.max(0, start - drop);
+    });
+  }
 
   document.querySelectorAll('.plan-base').forEach(el => {
     const tier = el.getAttribute('data-tier');
@@ -90,7 +92,11 @@ function updatePlanBonuses() {
     const tier = el.getAttribute('data-tier');
     if (tier && currentBonus[tier] != null) el.textContent = currentBonus[tier];
   });
+
+  const rollover = Math.max(1, Number(cfg.rollover_months || 6));
+  document.querySelectorAll('.rollover-months').forEach(el => { el.textContent = rollover; });
 }
+
 
 // --- Banner ---
 function renderBanner() {
@@ -116,16 +122,26 @@ function renderBanner() {
         closeBtn +
       '</div>';
   } else {
-    host.innerHTML =
-      '<div class="banner-strip banner-' + theme + ' banner-static">' +
-        '<div class="banner-inner">' + text + '</div>' +
-        closeBtn +
-      '</div>';
+    const lines = (text || '').split('\n').slice(0,5).map(s => '<div>'+s+'</div>').join('');
+host.innerHTML =
+  '<div class="banner-strip banner-' + theme + ' banner-static">' +
+    '<div class="banner-inner" style="display:flex;flex-direction:column;gap:2px">' + lines + '</div>' +
+    closeBtn +
+  '</div>';
+
   }
 
   host.classList.remove('hidden');
+  const headerEl = document.querySelector('header');
+  const applyOffset = () => { if (headerEl) headerEl.style.top = host.offsetHeight + 'px'; };
+  applyOffset();
+  window.addEventListener('resize', applyOffset);
   const btn = document.getElementById('banner-close');
-  if (btn) btn.addEventListener('click', () => { host.classList.add('hidden'); });
+  if (btn) btn.addEventListener('click', () => {
+    host.classList.add('hidden');
+    if (headerEl) headerEl.style.top = '0px';
+  });
+  
 }
 
 // --- Time helpers / formatting ---
