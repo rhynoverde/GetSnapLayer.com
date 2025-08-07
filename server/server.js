@@ -501,24 +501,6 @@ app.get('/api/runtime-config', (req, res) => {
     res.json({ prelaunchStart: start, cfg });
 });
 
-app.get('/control-room/toggles', adminAuth, (req, res) => {
-    res.json(cfg);
-});
-
-app.post('/control-room/toggles', adminAuth, (req, res) => {
-    const body = req.body || {};
-    cfg.discount_override = (body.discount_override === '' || body.discount_override == null) ? null : Number(body.discount_override);
-    cfg.bonus_override = (body.bonus_override === '' || body.bonus_override == null) ? null : Number(body.bonus_override);
-    cfg.hold_drop = !!body.hold_drop;
-    cfg.rollover_months = Math.max(1, Math.round(Number(body.rollover_months || cfg.rollover_months || 6)));
-    cfg.banner = (body.banner || '').toString().slice(0, 280);
-    cfg.banner_style = (body.banner_style || 'static');
-    cfg.banner_theme = (body.banner_theme || 'info');
-    cfg.banner_speed = Math.max(6, Math.min(60, Number(body.banner_speed || 18)));
-    cfg.banner_dismissible = (body.banner_dismissible !== false);
-    res.json({ ok: true, ...cfg });
-});
-
 app.get('/health', (req, res) => res.send('ok'));
 
 
@@ -576,338 +558,190 @@ function referralExtraPerUnit(tier, now = new Date()) {
     return Math.floor(0.10 * (base + bonus));
 }
 
-/* Generate today’s referral code (1 per day per owner) */
-app.post('/api/referrals/generate', async (req, res) => {
-    try {
-        const ownerEmail = (req.body?.ownerEmail || '').trim().toLowerCase();
-        if (!ownerEmail) return res.status(400).json({ error: 'email_required' });
-        if (!(await hasPurchased(ownerEmail))) return res.status(403).json({ error: 'not_a_customer' });
-
-        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const ymd = today.toISOString().slice(0, 10);
-
-        // If already issued today and still "issued", reuse it
-        const q = `${process.env.NOCO_API_URL}/${T.codes}?limit=1&where=(owner_email,eq,${ownerEmail})~and(issued_date,eq,${ymd})`;
-        const { data: cd } = await axios.get(q, headers).catch(() => ({ data: { list: [] } }));
-        const existing = (cd.list || [])[0];
-        if (existing && String(existing.status || '').toLowerCase() === 'issued') {
-            return res.json({ code: existing.code });
-        }
-
-        // Generate new code
-        const code = Math.random().toString(36).slice(2, 9).toUpperCase();
-        await axios.post(`${process.env.NOCO_API_URL}/${T.codes}`, {
-            code,
-            owner_email: ownerEmail,
-            status: 'issued',
-            issued_date: ymd
-        }, headers);
-
-        // Upsert owner row counters
-        try {
-            const { data: odata } = await axios.get(
-                `${process.env.NOCO_API_URL}/${T.owners}?limit=1&where=(owner_email,eq,${ownerEmail})`,
-                headers
-            );
-            const row = (odata.list || [])[0];
-            if (row) {
-                await axios.patch(`${process.env.NOCO_API_URL}/${T.owners}/${row.Id || row.id}`, {
-                    total_codes_issued: (row.total_codes_issued || 0) + 1,
-                    updated_ts: new Date().toISOString()
-                }, headers);
-            } else {
-                await axios.post(`${process.env.NOCO_API_URL}/${T.owners}`, {
-                    owner_email: ownerEmail,
-                    total_codes_issued: 1,
-                    total_redemptions: 0,
-                    credits_earned: 0,
-                    created_ts: new Date().toISOString(),
-                    updated_ts: new Date().toISOString()
-                }, headers);
-            }
-        } catch { }
-
-        res.json({ code });
-    } catch (e) {
-        res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
-    }
-});
-
 /* Referral history for an owner */
-app.get('/api/referrals/history', async (req, res) => {
-    try {
-        const ownerEmail = (req.query.email || '').trim().toLowerCase();
-        if (!ownerEmail) return res.status(400).json({ error: 'email_required' });
 
-        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
-
-        // Owner summary
-        const oUrl = `${process.env.NOCO_API_URL}/${T.owners}?limit=1&where=(owner_email,eq,${ownerEmail})`;
-        const { data: odata } = await axios.get(oUrl, headers).catch(() => ({ data: { list: [] } }));
-        const owner = (odata.list || [])[0] || {};
-        const summary = {
-            total_redemptions: owner.total_redemptions || 0,
-            credits_earned: owner.credits_earned || 0
-        };
-
-        // Codes for owner
-        const cUrl = `${process.env.NOCO_API_URL}/${T.codes}?limit=200&where=(owner_email,eq,${ownerEmail})`;
-        const { data: cdata } = await axios.get(cUrl, headers).catch(() => ({ data: { list: [] } }));
-        const codes = (cdata.list || []).map(r => r.code);
-
-        // Redemptions for those codes
-        let redemptions = [];
-        if (codes.length) {
-            const chunk = codes.slice(0, 50).join('|'); // basic in clause via regex OR
-            const rUrl = `${process.env.NOCO_API_URL}/${T.redemptions}?limit=200&where=(code,regex,${chunk})`;
-            const { data: rdata } = await axios.get(rUrl, headers).catch(() => ({ data: { list: [] } }));
-            redemptions = rdata.list || [];
-        }
-
-        res.json({ ...summary, redemptions });
-    } catch (e) {
-        res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
-    }
-});
 
 /* Redeem after purchase (prorate credits on future invoices via webhook) */
-app.post('/api/referrals/redeem-after', async (req, res) => {
-    try {
-        const code = (req.body?.code || '').trim().toUpperCase();
-        const purchaserEmail = (req.body?.purchaserEmail || '').trim().toLowerCase();
-        if (!code || !purchaserEmail) return res.status(400).json({ error: 'required' });
 
-        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
-        const row = await fetchCodeRow(code);
-        if (!row || String(row.status || '').toLowerCase() !== 'issued') {
-            return res.status(400).json({ error: 'invalid_or_used' });
-        }
-
-        // Look up purchaser’s last purchase to compute plan + potential refund % to max 50
-        const pUrl = `${process.env.NOCO_API_URL}/${T.purchases}?limit=1&where=(email,eq,${purchaserEmail})&sort=-CreatedAt`;
-        const { data: pdata } = await axios.get(pUrl, headers).catch(() => ({ data: { list: [] } }));
-        const purchase = (pdata.list || [])[0];
-        if (!purchase) return res.status(404).json({ error: 'no_purchase_found' });
-
-        const tier = purchase.tier;
-        const stack = Math.max(1, parseInt(purchase.stack_count || 1, 10));
-        const extraPerUnit = referralExtraPerUnit(tier);
-        const credit_value = extraPerUnit * stack;
-
-        const discount_refund_due = Math.max(0, 50 - (Number(purchase.discount_percent) || 0)); // % points
-
-        // Record redemption and mark code as used
-        await axios.post(`${process.env.NOCO_API_URL}/${T.redemptions}`, {
-            code,
-            purchaser_email: purchaserEmail,
-            tier_purchased: tier,
-            discount_percent_applied: 50,
-            credit_value,
-            redeemed_ts: new Date().toISOString(),
-            checkout_session_id: purchase.checkout_session_id || '',
-            amount_total_usd: purchase.price_paid || 0,
-            agency_stacked: stack
-        }, headers).catch(() => { });
-
-        try {
-            await axios.patch(`${process.env.NOCO_API_URL}/${T.codes}/${row.Id || row.id}`, {
-                status: 'used',
-                used_by_email: purchaserEmail,
-                used_at: new Date().toISOString()
-            }, headers);
-        } catch { }
-
-        // Owner counters
-        try {
-            const ownerEmail = row.owner_email || '';
-            if (ownerEmail) {
-                const { data: odata } = await axios.get(
-                    `${process.env.NOCO_API_URL}/${T.owners}?limit=1&where=(owner_email,eq,${ownerEmail})`,
-                    headers
-                );
-                const owner = (odata.list || [])[0];
-                if (owner) {
-                    await axios.patch(`${process.env.NOCO_API_URL}/${T.owners}/${owner.Id || owner.id}`, {
-                        total_redemptions: (owner.total_redemptions || 0) + 1,
-                        credits_earned: (owner.credits_earned || 0) + credit_value,
-                        updated_ts: new Date().toISOString()
-                    }, headers);
-                }
-            }
-        } catch { }
-
-        res.json({ ok: true, credit_value, discount_refund_due });
-    } catch (e) {
-        res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
-    }
-});
 
 /* Pricing options used by the plan modal */
-app.post('/api/pricing-options', async (req, res, next) => {
-    return next();
-});
 
 
 /* Create a Stripe Checkout session for the selected plan */
-app.post('/api/create-plan-checkout', async (req, res, next) => {
-    return next();
-});
 
 app.get('/checkout-success', async (req, res) => {
     const sessionId = req.query.session_id || '';
     let email = '';
     let amount = '';
     let currency = 'USD';
-  
+
     let tier = '';
     let stack = 1;
     let installments = 1;
-  
+
     let planTotal = 0;     // one-time total before plan fee
     let planFee = 0;       // added fee for payment plans
     let planGross = 0;     // total with plan fee
     let perPayment = 0;    // amount per installment
     let discountPct = 0;
-  
+
     let baseCredits = 0;
     let bonusCredits = 0;
     let referralCredits = 0;
-  
+
     let createdAt = new Date();
-  
+
     try {
-      if (sessionId) {
-        const s = await stripeClient.checkout.sessions.retrieve(sessionId);
-        email = s.customer_details?.email || '';
-        amount = ((s.amount_total || 0) / 100).toFixed(2);
-        currency = (s.currency || 'usd').toUpperCase();
-        createdAt = new Date((s.created || Math.floor(Date.now() / 1000)) * 1000);
-  
-        let md = s.metadata || {};
-        if (s.subscription) {
-          try {
-            const sub = await stripeClient.subscriptions.retrieve(s.subscription);
-            md = sub.metadata || md;
-          } catch {}
+        if (sessionId) {
+            const s = await stripeClient.checkout.sessions.retrieve(sessionId);
+            email = s.customer_details?.email || '';
+            amount = ((s.amount_total || 0) / 100).toFixed(2);
+            currency = (s.currency || 'usd').toUpperCase();
+            createdAt = new Date((s.created || Math.floor(Date.now() / 1000)) * 1000);
+
+            let md = s.metadata || {};
+            if (s.subscription) {
+                try {
+                    const sub = await stripeClient.subscriptions.retrieve(s.subscription);
+                    md = sub.metadata || md;
+                } catch { }
+            }
+
+            tier = String(md.tier || '').toLowerCase();
+            stack = Math.max(1, parseInt(md.stack_count || md.agency_stacked || '1', 10));
+            installments = Math.max(1, parseInt(md.installments || '1', 10));
+
+            planTotal = Number(md.plan_total_cents || 0) / 100;
+            planFee = Number(md.plan_fee_cents || 0) / 100;
+            planGross = Number(md.plan_gross_cents || 0) / 100;
+            perPayment = Number(md.per_payment_cents || 0) / 100;
+
+            const basePerUnitCredits = Number(md.baseCredits || (BASE_CREDITS[tier] || 0));
+            const bonusPerUnit = Number(md.bonusCredits || 0);
+            const refExtraPerUnit = Number(md.referralExtra || 0);
+
+            baseCredits = basePerUnitCredits * stack;
+            bonusCredits = bonusPerUnit * stack;
+            referralCredits = refExtraPerUnit * stack;
+
+            const baseNoDiscTotal = (BASE_PRICES[tier] || 0) * stack;
+            discountPct = Number(md.discountPctUsed || 0) || (baseNoDiscTotal ? Math.max(0, Math.round((1 - (planTotal || ((s.amount_total || 0) / 100)) / baseNoDiscTotal) * 100)) : 0);
+
+            if (!planTotal && baseNoDiscTotal) {
+                planTotal = +(((s.amount_total || 0) / 100)).toFixed(2);
+            }
+            if (!planGross) planGross = +(planTotal + planFee).toFixed(2);
+            if (!perPayment && installments > 1) perPayment = +(planGross / installments).toFixed(2);
         }
-  
-        tier = String(md.tier || '').toLowerCase();
-        stack = Math.max(1, parseInt(md.stack_count || md.agency_stacked || '1', 10));
-        installments = Math.max(1, parseInt(md.installments || '1', 10));
-  
-        planTotal = Number(md.plan_total_cents || 0) / 100;
-        planFee   = Number(md.plan_fee_cents || 0) / 100;
-        planGross = Number(md.plan_gross_cents || 0) / 100;
-        perPayment = Number(md.per_payment_cents || 0) / 100;
-  
-        const basePerUnitCredits = Number(md.baseCredits || (BASE_CREDITS[tier] || 0));
-        const bonusPerUnit = Number(md.bonusCredits || 0);
-        const refExtraPerUnit = Number(md.referralExtra || 0);
-  
-        baseCredits = basePerUnitCredits * stack;
-        bonusCredits = bonusPerUnit * stack;
-        referralCredits = refExtraPerUnit * stack;
-  
-        const baseNoDiscTotal = (BASE_PRICES[tier] || 0) * stack;
-        discountPct = Number(md.discountPctUsed || 0) || (baseNoDiscTotal ? Math.max(0, Math.round((1 - (planTotal || ((s.amount_total || 0) / 100)) / baseNoDiscTotal) * 100)) : 0);
-  
-        if (!planTotal && baseNoDiscTotal) {
-          planTotal = +(((s.amount_total || 0) / 100)).toFixed(2);
-        }
-        if (!planGross) planGross = +(planTotal + planFee).toFixed(2);
-        if (!perPayment && installments > 1) perPayment = +(planGross / installments).toFixed(2);
-      }
     } catch (e) {
-      console.error('retrieve session error', e.message);
+        console.error('retrieve session error', e.message);
     }
-  
+
     const label = (t => ({ solo: 'SOLO', plus: 'PLUS', pro: 'PRO', agency: 'AGENCY' }[t] || t.toUpperCase()))(tier);
     const payDay = createdAt.getDate();
-  
-    const _fmt = new Intl.NumberFormat('en-US',{style:'currency',currency});
+
+    const _fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency });
     const _feeDollars = Math.max(0, (planGross || 0) - (planTotal || 0));
     const _feePct = planTotal ? Math.round((_feeDollars / planTotal) * 100) : 0;
     const oneLinePrice = installments > 1
         ? `${_fmt.format(planTotal)} + ${_feePct}% plan fee of ${_fmt.format(_feeDollars)} = ${_fmt.format(planGross)}`
         : `${_fmt.format(planTotal)}`;
-  
+
     const paymentsLine = installments > 1
-      ? `${installments} payments of ${new Intl.NumberFormat('en-US',{style:'currency',currency}).format(perPayment)} (charged each month around the ${payDay}th)`
-      : `Paid in full today`;
-  
-      const _nf = new Intl.NumberFormat('en-US');
-      const creditsLine = `${_nf.format(baseCredits)} Credits + ${_nf.format(bonusCredits)} PreLaunch Bonus Credits${referralCredits ? ` + ${_nf.format(referralCredits)} Referral Credits` : ''} = ${_nf.format(baseCredits + bonusCredits + referralCredits)} Total Credits`;
-        
+        ? `${installments} payments of ${new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(perPayment)} (charged each month around the ${payDay}th)`
+        : `Paid in full today`;
+
+    const _nf = new Intl.NumberFormat('en-US');
+    const creditsLine = `${_nf.format(baseCredits)} Credits + ${_nf.format(bonusCredits)} PreLaunch Bonus Credits${referralCredits ? ` + ${_nf.format(referralCredits)} Referral Credits` : ''} = ${_nf.format(baseCredits + bonusCredits + referralCredits)} Total Monthly Image Credits`;
+
     let suggestedUsername = (() => {
         const base = (email || '').split('@')[0];
-        return (base || 'user').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,24);
-      })();
-      try {
+        return (base || 'user').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24);
+    })();
+    try {
         const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
 
         // 1) Do we already have a user for this email?
         let existingUser = null;
         try {
-          const { data: uByEmail } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(email,eq,${email})`, headers);
-          existingUser = (uByEmail.list || [])[0] || null;
-        } catch {}
+            const { data: uByEmail } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(email,eq,${email})`, headers);
+            existingUser = (uByEmail.list || [])[0] || null;
+        } catch { }
 
         if (existingUser && (existingUser.username || '').trim()) {
-          // Use their saved username as-is.
-          suggestedUsername = existingUser.username.trim();
+            // Use their saved username as-is.
+            suggestedUsername = existingUser.username.trim();
         } else {
-          // Propose from email local-part; ensure uniqueness.
-          let candidate = suggestedUsername;
-          let needsSuffix = false;
-          try {
-            const { data: uByName } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(username,eq,${candidate})`, headers);
-            needsSuffix = !!(uByName.list && uByName.list[0] && (uByName.list[0].email || '').toLowerCase() !== (email || '').toLowerCase());
-          } catch {}
-          if (needsSuffix) {
-            const suffix = Math.random().toString(36).slice(2,6);
-            candidate = `${candidate}-${suffix}`;
-          }
-          suggestedUsername = candidate;
-
-          // Persist now: update existing user (no username) or create new user.
-          try {
-            if (existingUser) {
-              await axios.patch(`${process.env.NOCO_API_URL}/${T.users}/${existingUser.Id || existingUser.id}`, {
-                username: suggestedUsername, updated_ts: new Date().toISOString()
-              }, headers);
-            } else {
-              await axios.post(`${process.env.NOCO_API_URL}/${T.users}`, {
-                email, username: suggestedUsername, created_ts: new Date().toISOString()
-              }, headers);
+            // Propose from email local-part; ensure uniqueness.
+            let candidate = suggestedUsername;
+            let needsSuffix = false;
+            try {
+                const { data: uByName } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(username,eq,${candidate})`, headers);
+                needsSuffix = !!(uByName.list && uByName.list[0] && (uByName.list[0].email || '').toLowerCase() !== (email || '').toLowerCase());
+            } catch { }
+            if (needsSuffix) {
+                const suffix = Math.random().toString(36).slice(2, 6);
+                candidate = `${candidate}-${suffix}`;
             }
-          } catch {}
-        }
-      } catch {}
+            suggestedUsername = candidate;
 
-  
-      let shareImg = '';
-      try {
-        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
-        const today = new Date().toISOString().slice(0,10);
-        let code = '';
-        const q = `${process.env.NOCO_API_URL}/${T.codes}?limit=1&where=(owner_email,eq,${email})~and(issued_date,eq,${today})`;
-        const { data: existing } = await axios.get(q, headers);
-        if (existing.list?.[0]?.code) {
-          code = existing.list[0].code;
-        } else {
-          code = Math.random().toString(36).slice(2,9).toUpperCase();
-          await axios.post(`${process.env.NOCO_API_URL}/${T.codes}`, {
-            code,
-            owner_email: email,
-            issued_date: today,
-            status: 'issued'
-          }, headers);
+            // Persist now: update existing user (no username) or create new user.
+            try {
+                if (existingUser) {
+                    await axios.patch(`${process.env.NOCO_API_URL}/${T.users}/${existingUser.Id || existingUser.id}`, {
+                        username: suggestedUsername, updated_ts: new Date().toISOString()
+                    }, headers);
+                } else {
+                    await axios.post(`${process.env.NOCO_API_URL}/${T.users}`, {
+                        email, username: suggestedUsername, created_ts: new Date().toISOString()
+                    }, headers);
+                }
+            } catch { }
         }
-        shareImg = `https://my.reviewshare.pics/i/uvfZfFhwv.png?custom_text_1=${encodeURIComponent(code)}`;
-      } catch {}
-      res.set('Content-Type', 'text/html');
-          res.send(`<!DOCTYPE html>
+    } catch { }
+
+
+    let shareRocket = '';
+    let shareMonster = '';
+    let shareImg = '';
+    try {
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+        const now  = new Date();
+        const ymd  = now.toISOString().slice(0, 10);                               // YYYY-MM-DD
+
+        let code = '';
+        const q = `${process.env.NOCO_API_URL}/${T.codes}?limit=1` +
+                  `&where=(owner_email,eq,${email})~and(issued_date,eq,${ymd})`;
+        console.log('Fetching existing code:', q);
+        const { data: existing } = await axios.get(q, headers).catch(() => ({ data: { list: [] } }));
+        if (existing.list?.[0]?.code) {
+            code = existing.list[0].code;
+            console.log('Found existing code:', code);
+        } else {
+            code = Math.random().toString(36).slice(2, 9).toUpperCase();
+            console.log('Generating new code:', code);
+            await axios.post(`${process.env.NOCO_API_URL}/${T.codes}`, {
+                code,
+                owner_email: email,
+                issued_date: ymd,
+                status: 'issued'
+            }, headers);
+            console.log('Posted new code');
+        }
+
+        shareRocket  = `https://my.reviewshare.pics/i/uvfZfFhwv.png?custom_text_1=${encodeURIComponent(code)}`;
+        shareMonster = `https://my.reviewshare.pics/i/YV4pSeYFI.png?custom_text_1=${encodeURIComponent(code)}`;
+        shareImg     = shareRocket;
+
+    } catch (e) {
+        console.error('Error in share code block:', e);
+    }
+    if (!shareRocket) shareRocket = 'https://f000.backblazeb2.com/file/GetSnapLayer/images/SnapLayerBlastingOff-003.jpg';
+    if (!shareMonster) shareMonster = 'https://f000.backblazeb2.com/file/GetSnapLayer/images/monster-001.jpg';
+    if (!shareImg) shareImg = shareRocket;
+
+    res.set('Content-Type', 'text/html');
+    res.send(`<!DOCTYPE html>
   <html>
   <head>
   <meta charset="utf-8">
@@ -933,7 +767,7 @@ app.get('/checkout-success', async (req, res) => {
   <body>
     <div class="card">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-    <img src="/images/snaplayer-logo-on-blue-1024x1024.jpg" alt="SnapLayer" style="height:56px;width:56px;border-radius:12px">
+    <img src="https://f000.backblazeb2.com/file/GetSnapLayer/images/snaplayer-logo-on-blue-1024x1024.jpg" alt="SnapLayer" style="height:56px;width:56px;border-radius:12px">
     <span style="font-weight:800;font-size:18px;color:#dfe9ff">SnapLayer</span>
   </div>
       <h1>Thanks for your purchase!</h1>
@@ -977,8 +811,11 @@ app.get('/checkout-success', async (req, res) => {
       <h3 style="margin:0 0 8px 0">Share & earn bonus credits</h3>
       <p class="small">We’ve got images you can use to share the SnapLayer PreLaunch and your referral code. Placeholders for now—assets coming soon.</p>
       <div class="grid two" style="margin-top:8px">
-  <a class="box" href="${shareImg}" target="_blank" style="display:block">
-    <img src="${shareImg}" alt="Your share image" style="max-width:100%;border-radius:10px">
+  <a class="box" href="${shareRocket}" target="_blank" style="display:block">
+    <img src="${shareRocket}" alt="Rocket share image" style="max-width:100%;border-radius:10px">
+  </a>
+  <a class="box" href="${shareMonster}" target="_blank" style="display:block">
+    <img src="${shareMonster}" alt="Monster share image" style="max-width:100%;border-radius:10px">
   </a>
 </div>
 
@@ -1012,48 +849,48 @@ app.get('/checkout-success', async (req, res) => {
   </script>
   </body>
   </html>`);
-  });
-  
-  app.post('/api/finish-profile', express.json(), async (req, res) => {
+});
+
+app.post('/api/finish-profile', express.json(), async (req, res) => {
     try {
-      const { email = '', username = '', phone = '', optin = false } = req.body || {};
-      if (!email) return res.status(400).json({ error: 'email_required' });
-  
-      const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
-  
-      let finalUsername = (username || (email.split('@')[0] || 'user'))
-        .toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,24);
-      try {
-        const q = `${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(username,eq,${finalUsername})`;
-        const { data: chk } = await axios.get(q, headers);
-        if (chk.list?.[0] && (chk.list[0].email || '').toLowerCase() !== email.toLowerCase()) {
-          finalUsername = `${finalUsername}-${Math.random().toString(36).slice(2,6)}`;
+        const { email = '', username = '', phone = '', optin = false } = req.body || {};
+        if (!email) return res.status(400).json({ error: 'email_required' });
+
+        const headers = { headers: { 'xc-token': process.env.NOCO_API_TOKEN } };
+
+        let finalUsername = (username || (email.split('@')[0] || 'user'))
+            .toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24);
+        try {
+            const q = `${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(username,eq,${finalUsername})`;
+            const { data: chk } = await axios.get(q, headers);
+            if (chk.list?.[0] && (chk.list[0].email || '').toLowerCase() !== email.toLowerCase()) {
+                finalUsername = `${finalUsername}-${Math.random().toString(36).slice(2, 6)}`;
+            }
+        } catch { }
+
+        let uid = null;
+
+        try {
+            const { data: u1 } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(email,eq,${email})`, headers);
+            if (u1.list?.[0]) uid = u1.list[0].Id || u1.list[0].id;
+        } catch { }
+
+        if (uid) {
+            await axios.patch(`${process.env.NOCO_API_URL}/${T.users}/${uid}`, {
+                username: finalUsername, phone, marketing_opt_in: !!optin, updated_ts: new Date().toISOString()
+            }, headers).catch(() => { });
+        } else {
+            await axios.post(`${process.env.NOCO_API_URL}/${T.users}`, {
+                email, username: finalUsername, phone, marketing_opt_in: !!optin, created_ts: new Date().toISOString()
+            }, headers).catch(() => { });
         }
-      } catch {}
-  
-      let uid = null;
-  
-      try {
-        const { data: u1 } = await axios.get(`${process.env.NOCO_API_URL}/${T.users}?limit=1&where=(email,eq,${email})`, headers);
-        if (u1.list?.[0]) uid = u1.list[0].Id || u1.list[0].id;
-      } catch {}
-  
-      if (uid) {
-        await axios.patch(`${process.env.NOCO_API_URL}/${T.users}/${uid}`, {
-            username: finalUsername, phone, marketing_opt_in: !!optin, updated_ts: new Date().toISOString()
-          }, headers).catch(() => {});         
-      } else {
-        await axios.post(`${process.env.NOCO_API_URL}/${T.users}`, {
-            email, username: finalUsername, phone, marketing_opt_in: !!optin, created_ts: new Date().toISOString()
-          }, headers).catch(() => {});
-      }
-  
-      res.json({ ok: true, username: finalUsername });
+
+        res.json({ ok: true, username: finalUsername });
     } catch (e) {
-      res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
+        res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
     }
-  });
-  
+});
+
 
 /* Validate a referral code is unused & return owner email */
 app.post('/api/check-code', async (req, res) => {
@@ -1224,11 +1061,30 @@ app.get('/api/referrals/history', async (req, res) => {
         const total = list.length;
         const credits = list.reduce((s, r) => s + Number(r.credit_value || 0), 0);
 
+        function toSchemaDate(dt) {
+            if (!dt) return '';
+            const d = new Date(dt);
+            if (isNaN(d.getTime())) return String(dt);
+            let yyyy = d.getFullYear();
+            let mm = String(d.getMonth() + 1).padStart(2, '0');
+            let dd = String(d.getDate()).padStart(2, '0');
+            let hr = d.getHours();
+            let min = String(d.getMinutes()).padStart(2, '0');
+            let ampm = hr >= 12 ? 'PM' : 'AM';
+            let hr12 = hr % 12; if (hr12 === 0) hr12 = 12;
+            return `${yyyy}-${mm}-${dd} ${String(hr12).padStart(2, '0')}:${min} ${ampm}`;
+        }
         res.json({
             total_redemptions: total,
             credits_earned: credits,
-            redemptions: list.sort((a, b) => String(b.redeemed_ts || '').localeCompare(String(a.redeemed_ts || '')))
+            redemptions: list
+                .map(r => ({
+                    ...r,
+                    redeemed_ts: toSchemaDate(r.redeemed_ts)
+                }))
+                .sort((a, b) => String(b.redeemed_ts || '').localeCompare(String(a.redeemed_ts || '')))
         });
+
     } catch (e) {
         res.status(500).json({ error: 'server_error', detail: e.response?.data || e.message });
     }

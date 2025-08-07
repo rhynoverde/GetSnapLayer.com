@@ -34,24 +34,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnPlanOther = document.getElementById('plan-other');
 
     const altModal = document.getElementById('altpay-modal');
-    const altMethod       = document.getElementById('alt-method');
-    const altOtherMethod  = document.getElementById('alt-other-method');
-    const altEmail        = document.getElementById('alt-email');
-    const altPhone        = document.getElementById('alt-phone');
-    const btnAltSubmit    = document.getElementById('alt-submit');
-    const btnAltBack      = document.getElementById('alt-back');
-    const altNote         = document.getElementById('alt-note');
-    
+    const altMethod = document.getElementById('alt-method');
+    const altOtherMethod = document.getElementById('alt-other-method');
+    const altEmail = document.getElementById('alt-email');
+    const altPhone = document.getElementById('alt-phone');
+    const btnAltSubmit = document.getElementById('alt-submit');
+    const btnAltBack = document.getElementById('alt-back');
+    const altNote = document.getElementById('alt-note');
+
     altMethod && altMethod.addEventListener('change', () => {
-      if (!altOtherMethod) return;
-      if ((altMethod.value || '') === 'other') {
-        altOtherMethod.classList.remove('hidden');
-      } else {
-        altOtherMethod.classList.add('hidden');
-        altOtherMethod.value = '';
-      }
+        if (!altOtherMethod) return;
+        if ((altMethod.value || '') === 'other') {
+            altOtherMethod.classList.remove('hidden');
+        } else {
+            altOtherMethod.classList.add('hidden');
+            altOtherMethod.value = '';
+        }
     });
-    
+
 
 
     let selectedInstallments = 1;
@@ -102,29 +102,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     {
                         const qty = lastStack;
                         const unit = (data.oneTime?.total || 0) / Math.max(1, qty);
-                        const unitFmt  = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' }).format(unit);
-                        const totalFmt = data.oneTime?.totalFormatted || new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' }).format(data.oneTime?.total || 0);
+                        const unitFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unit);
+                        const totalFmt = data.oneTime?.totalFormatted || new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.oneTime?.total || 0);
                         const tierName = (selectedTier || '').toUpperCase();
-                        const baseCredits  = Number(data.baseCredits || 0) * qty;
+                        const baseCredits = Number(data.baseCredits || 0) * qty;
                         const bonusCredits = Number(data.bonusCredits || 0) * qty;
-                        const refExtra     = Number(data.referralExtraTotal || 0);
-                        const discount     = Math.round(Number(data.discountPct || 0));
-                      
+                        const refExtra = Number(data.referralExtraTotal || 0);
+                        const discount = Math.round(Number(data.discountPct || 0));
+
                         const nf = new Intl.NumberFormat('en-US');
-let line = `<div class="text-sm">
+                        let line = `<div class="text-sm">
                           <div class="font-semibold">${tierName} Plan - ${qty} License Stack</div>
                           <div class="mt-1">${unitFmt} × ${qty} = <span class="font-semibold">${totalFmt}</span> <span class="text-blue-300">(${discount}% off today)</span></div>
-                          <div class="mt-1 text-blue-100">${nf.format(baseCredits)} Credits + ${nf.format(bonusCredits)} PreLaunch Bonus Credits${data.referralValid ? ` + ${nf.format(refExtra)} Referral Credits` : ''} = <span class="font-semibold">${nf.format(baseCredits + bonusCredits + (data.referralValid ? refExtra : 0))} Total Credits</span></div>
+                          <div class="mt-1 text-blue-100">${nf.format(baseCredits)} Credits + ${nf.format(bonusCredits)} PreLaunch Bonus Credits${data.referralValid ? ` + ${nf.format(refExtra)} Referral Credits` : ''} = <span class="font-semibold">${nf.format(baseCredits + bonusCredits + (data.referralValid ? refExtra : 0))} Total Monthly Image Credits</span></div>
                         </div>`;
-                      
+
                         if (data.referralValid) {
-                          const name = data.referrerUsername ? `, ${data.referrerUsername},` : '';
-                          line += `<div class="mt-2 text-green-300 text-xs">Valid code — You and the referrer${name ? name : ''} each get ${refExtra} bonus credits.</div>`;
+                            const name = data.referrerUsername ? `, ${data.referrerUsername},` : '';
+                            line += `<div class="mt-2 text-green-300 text-xs">Valid code — You and the referrer${name ? name : ''} each get ${refExtra} bonus credits.</div>`;
                         }
-                      
+
                         planSummary.innerHTML = line + `<div class="text-blue-300 text-xs mt-2">If you choose payment plans, credits are added per successful payment.</div>`;
-                      }
-                      
+                    }
+
                 } else {
                     planSummary.textContent = base;
                 }
@@ -231,32 +231,32 @@ let line = `<div class="text-sm">
 
     btnAltSubmit && btnAltSubmit.addEventListener('click', async () => {
         const payload = {
-          tier        : selectedTier,
-          referralCode: lastReferral,
-          stackCount  : lastStack,
-          installments: selectedInstallments,
-          email       : (altEmail?.value || '').trim(),
-          phone       : (altPhone?.value || '').trim(),
-          method      : (altMethod?.value || 'other'),
-          other_method: ((altMethod?.value || '') === 'other') ? (altOtherMethod?.value || '').trim() : ''
+            tier: selectedTier,
+            referralCode: lastReferral,
+            stackCount: lastStack,
+            installments: selectedInstallments,
+            email: (altEmail?.value || '').trim(),
+            phone: (altPhone?.value || '').trim(),
+            method: (altMethod?.value || 'other'),
+            other_method: ((altMethod?.value || '') === 'other') ? (altOtherMethod?.value || '').trim() : ''
         };
         altNote.textContent = 'Working...';
         try {
-          const r = await fetch((window.SNAP_API_BASE || '') + '/api/alt-pay-request', {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify(payload)
-          });
-          const data = await r.json();
-          if (data?.reference) {
-            altNote.textContent = 'Request captured. Check your DMs/email shortly. Reference: ' + data.reference;
-          } else {
-            altNote.textContent = 'Could not record your request. Please try again.';
-          }
+            const r = await fetch((window.SNAP_API_BASE || '') + '/api/alt-pay-request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await r.json();
+            if (data?.reference) {
+                altNote.textContent = 'Request captured. Check your DMs/email shortly. Reference: ' + data.reference;
+            } else {
+                altNote.textContent = 'Could not record your request. Please try again.';
+            }
         } catch {
-          altNote.textContent = 'Could not record your request. Please try again.';
+            altNote.textContent = 'Could not record your request. Please try again.';
         }
-      });     
+    });
 
 
     function openModal(tier) {
@@ -267,8 +267,8 @@ let line = `<div class="text-sm">
         stackWrap.classList.remove('hidden');
         modal.classList.remove('hidden');
         refreshReferralPanel();
-      }
-      
+    }
+
     function hideModal() { modal.classList.add('hidden'); }
 
     modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
@@ -277,88 +277,88 @@ let line = `<div class="text-sm">
 
     async function refreshReferralPanel() {
         const code = (input?.value || '').trim();
-        const qty  = Math.max(1, parseInt(stackSelect?.value || '1', 10));
+        const qty = Math.max(1, parseInt(stackSelect?.value || '1', 10));
         const tier = selectedTier || '';
-      
-        const fmtMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(+n || 0);
-      
-        try {
-          const r = await fetch((window.SNAP_API_BASE || '') + '/api/pricing-options', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tier,
-              referralCode: code,
-              stackCount: qty,
-              promoCode: window.SNAP_PROMO_CODE || ''
-            })
-          });
-          const d = await r.json();
-      
-          const baseCredits  = Number(d.baseCredits || 0) * qty;
-          const bonusCredits = Number(d.bonusCredits || 0) * qty;
-          const refExtra     = Number(d.referralExtraTotal || 0);
-          const totalNoRef   = baseCredits + bonusCredits;
-          const totalWithRef = totalNoRef + refExtra;
-      
-          const total        = (d.oneTime?.total ?? 0);
-          const unit         = qty > 0 ? (total / qty) : 0;
-          const unitFmt      = fmtMoney(unit);
-          const totalFmt     = d.oneTime?.totalFormatted || fmtMoney(total);
-          const tierName     = (tier || '').toUpperCase();
-      
-          if (refTierEl)  refTierEl.textContent  = `${tierName} Plan - ${qty} License Stack Plan`;
-          if (refPriceEl) refPriceEl.textContent = qty === 1 ? `${totalFmt}` : `${unitFmt} × ${qty} = ${totalFmt}`;
-      
-          if (refCredits) {
-            if (d.referralValid) {
-              refCredits.textContent = `${baseCredits} Credits + ${bonusCredits} PreLaunch Bonus Credits + ${refExtra} Referral Credits = ${totalWithRef} Total Monthly Credits`;
-            } else {
-              refCredits.textContent = `${baseCredits} Credits + ${bonusCredits} PreLaunch Bonus Credits = ${totalNoRef} Total Monthly Credits`;
-            }
-          }
-      
-          if (refStatus) {
-            if (!code) {
-              refStatus.textContent = '';
-              refStatus.className = '';
-            } else if (d.referralValid) {
-              const name = d.referrerUsername ? `, ${d.referrerUsername},` : '';
-              refStatus.className = 'text-green-300';
-              refStatus.textContent = `Valid code — You and the referrer${name ? name : ''} each get ${refExtra} bonus credits`;
-            } else {
-              const raw = (d.referralInvalidReason || '').toLowerCase();
-              const reason = raw.includes('used') ? 'Used' : raw.includes('expir') ? 'Expired' : 'Not In System';
-              refStatus.className = 'text-red-300';
-              refStatus.textContent = `Code Not Valid — ${reason}`;
-            }
-          }
-        } catch {
-          if (refStatus) {
-            if (code) {
-              refStatus.className = 'text-red-300';
-              refStatus.textContent = 'Could not validate code right now';
-            } else {
-              refStatus.textContent = '';
-              refStatus.className = '';
-            }
-          }
-        }
-      }
 
-      input.addEventListener('input', refreshReferralPanel);
-      stackSelect.addEventListener('change', refreshReferralPanel);
-      
-    (function setupReferralInfoModal(){
+        const fmtMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(+n || 0);
+
+        try {
+            const r = await fetch((window.SNAP_API_BASE || '') + '/api/pricing-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tier,
+                    referralCode: code,
+                    stackCount: qty,
+                    promoCode: window.SNAP_PROMO_CODE || ''
+                })
+            });
+            const d = await r.json();
+
+            const baseCredits = Number(d.baseCredits || 0) * qty;
+            const bonusCredits = Number(d.bonusCredits || 0) * qty;
+            const refExtra = Number(d.referralExtraTotal || 0);
+            const totalNoRef = baseCredits + bonusCredits;
+            const totalWithRef = totalNoRef + refExtra;
+
+            const total = (d.oneTime?.total ?? 0);
+            const unit = qty > 0 ? (total / qty) : 0;
+            const unitFmt = fmtMoney(unit);
+            const totalFmt = d.oneTime?.totalFormatted || fmtMoney(total);
+            const tierName = (tier || '').toUpperCase();
+
+            if (refTierEl) refTierEl.textContent = `${tierName} Plan - ${qty} License Stack Plan`;
+            if (refPriceEl) refPriceEl.textContent = qty === 1 ? `${totalFmt}` : `${unitFmt} × ${qty} = ${totalFmt}`;
+
+            if (refCredits) {
+                if (d.referralValid) {
+                    refCredits.textContent = `${baseCredits} Credits + ${bonusCredits} PreLaunch Bonus Credits + ${refExtra} Referral Credits = ${totalWithRef} Total Monthly Image Credits`;
+                } else {
+                    refCredits.textContent = `${baseCredits} Credits + ${bonusCredits} PreLaunch Bonus Credits = ${totalNoRef} Total Monthly Image Credits`;
+                }
+            }
+
+            if (refStatus) {
+                if (!code) {
+                    refStatus.textContent = '';
+                    refStatus.className = '';
+                } else if (d.referralValid) {
+                    const name = d.referrerUsername ? `, ${d.referrerUsername},` : '';
+                    refStatus.className = 'text-green-300';
+                    refStatus.textContent = `Valid code — You and the referrer${name ? name : ''} each get ${refExtra} bonus credits`;
+                } else {
+                    const raw = (d.referralInvalidReason || '').toLowerCase();
+                    const reason = raw.includes('used') ? 'Used' : raw.includes('expir') ? 'Expired' : 'Not In System';
+                    refStatus.className = 'text-red-300';
+                    refStatus.textContent = `Code Not Valid — ${reason}`;
+                }
+            }
+        } catch {
+            if (refStatus) {
+                if (code) {
+                    refStatus.className = 'text-red-300';
+                    refStatus.textContent = 'Could not validate code right now';
+                } else {
+                    refStatus.textContent = '';
+                    refStatus.className = '';
+                }
+            }
+        }
+    }
+
+    input.addEventListener('input', refreshReferralPanel);
+    stackSelect.addEventListener('change', refreshReferralPanel);
+
+    (function setupReferralInfoModal() {
         const openBtn = document.getElementById('referral-info');
         if (!openBtn) return;
-      
+
         let shell = document.getElementById('ref-info-modal');
         if (!shell) {
-          shell = document.createElement('div');
-          shell.id = 'ref-info-modal';
-          shell.className = 'fixed inset-0 z-50 hidden';
-          shell.innerHTML = `
+            shell = document.createElement('div');
+            shell.id = 'ref-info-modal';
+            shell.className = 'fixed inset-0 z-50 hidden';
+            shell.innerHTML = `
             <div class="absolute inset-0 bg-black/60"></div>
             <div class="absolute inset-0 flex items-center justify-center p-4">
               <div class="bg-blue-900 text-white rounded-xl shadow-xl max-w-lg w-full p-6 border border-blue-700">
@@ -373,16 +373,16 @@ let line = `<div class="text-sm">
                 </div>
               </div>
             </div>`;
-          document.body.appendChild(shell);
+            document.body.appendChild(shell);
         }
-      
+
         const show = () => { shell.classList.remove('hidden'); };
         const hide = () => { shell.classList.add('hidden'); };
-      
+
         openBtn.addEventListener('click', show);
         shell.addEventListener('click', (e) => { if (e.target === shell || e.target.id === 'ref-info-close') hide(); });
-      })();
-      
+    })();
+
 
     btnRefPlan?.addEventListener('click', async () => {
         await openPlanModal((input.value || '').trim());

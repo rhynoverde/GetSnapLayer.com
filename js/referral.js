@@ -2,11 +2,23 @@
     const API = (window.SNAP_API_BASE || '') + '';
     const $ = (id) => document.getElementById(id);
 
+    function parseSchemaDate(str) {
+        // Expects "2025-08-05 06:00 PM"
+        if (!str) return new Date('');
+        const m = str.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}) ([AP]M)$/);
+        if (!m) return new Date(str); // fallback
+        let [_, year, month, day, hour, min, ampm] = m;
+        year = +year; month = +month; day = +day; hour = +hour; min = +min;
+        if (ampm === 'PM' && hour !== 12) hour += 12;
+        if (ampm === 'AM' && hour === 12) hour = 0;
+        return new Date(year, month - 1, day, hour, min);
+    }
+    
     function setMsg(el, html, good) {
         if (!el) return;
         el.innerHTML = html;
         el.className = 'mt-3 text-sm ' + (good ? 'text-green-300' : 'text-red-300');
-    }
+    }   
 
     async function postJSON(url, body) {
         const r = await fetch(url, {
@@ -84,7 +96,7 @@
             if (ok && data) {
                 const items = Array.isArray(data.redemptions) ? data.redemptions : [];
                 const list = items.slice(0, 10).map(r =>
-                    `<li class="mb-1"><span class="font-mono">${r.code}</span> · ${r.tier_purchased} · ${r.credit_value} credits · ${new Date(r.redeemed_ts).toLocaleString()}</li>`
+                    `<li class="mb-1"><span class="font-mono">${r.code}</span> · ${r.tier_purchased} · ${r.credit_value} credits · ${parseSchemaDate(r.redeemed_ts).toLocaleString()}</li>`
                 ).join('');
                 setMsg(
                     resEl,
